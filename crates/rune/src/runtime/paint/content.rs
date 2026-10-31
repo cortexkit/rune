@@ -1017,7 +1017,7 @@ impl RuntimeCore {
                     Some(inp) => if inp.caret_inked { inp.caret } else { color },
                     None => spec.cold.caret.unwrap_or(color),
                 };
-                self.instances.push(rect_inst(c, premul(caret_color, o, srgb), 0.0, clip, fade));
+                self.paint_caret(i, c, premul(caret_color, o, srgb), clip, fade);
             }
             if let Some(at) = inline_image_wake {
                 arm_image_wake(&mut self.paint, &mut self.motion, self.frame.live.visible(), self.clock, self.time_scale, now, at);

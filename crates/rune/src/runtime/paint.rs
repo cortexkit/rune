@@ -7,6 +7,7 @@ pub(super) mod blend;
 pub(super) mod border;
 pub(super) mod build;
 pub(super) mod cache_layer;
+mod caret_blink;
 pub(super) mod content;
 pub(super) mod exit_mask;
 pub(super) mod grid;
