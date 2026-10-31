@@ -61,6 +61,7 @@ pub(crate) struct PaintState {
     pub(super) static_scales: HashMap<NodeId, ScaleSettle>,
     /// What the last paint painted, for subtrees that would paint it again (`paint_keep`).
     pub(super) keep: paint_keep::PaintKeep,
+    pub(super) caret_blink: super::caret_blink::CaretBlink,
     /// The composed turns `Inh::turn` points into, rebuilt each paint.
     pub(in crate::runtime) turn_scratch: Vec<Turn>,
     /// For nodes inside a turned layer: `(unturned_rect_pt, unturned_clip_px)`. Empty unless a
@@ -153,6 +154,7 @@ impl PaintState {
             pixel_snap: Default::default(),
             static_scales: HashMap::default(),
             keep: Default::default(),
+            caret_blink: Default::default(),
             turn_scratch: Vec::new(),
             unturned_drawn: Vec::new(),
             row_lifts: Vec::new(),

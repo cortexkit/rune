@@ -13,6 +13,7 @@ mod border_dash;
 mod border_gradient;
 mod canvas_input;
 mod caret;
+mod caret_blink;
 mod caret_follow;
 mod clip;
 mod cutout_circles;
