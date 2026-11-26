@@ -43,6 +43,7 @@ pub(crate) struct OffscreenText {
     pub path: String,
     pub key: Option<String>,
     pub group_path: Option<String>,
+    pub source_root: Option<std::rc::Rc<(String, std::rc::Rc<str>)>>,
     pub spec: TextSpec,
     /// True when this text and the previous selectable text in the same row share a horizontal
     /// (`FlexDirection::Row | FlexDirection::RowReverse`) lowest common ancestor (table cells).

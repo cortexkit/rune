@@ -87,12 +87,14 @@ mod memo;
 mod parser;
 mod plain;
 mod render;
+mod selection;
 mod stream;
 mod style;
 mod table;
 
 pub use find::{Case, Rendered, find};
 pub use image::ImageFrame;
+pub use selection::selection_source;
 pub use style::MarkdownStyle;
 pub use table::TableShrink;
 #[cfg(feature = "mermaid")] pub(crate) use style::DiagramPaint;
@@ -291,6 +293,7 @@ pub struct Markdown {
     link_ring: Option<LinkRing>,
     code_link: Option<CodeLink>,
     selectable: bool,
+    track_source: bool,
     copy_source: bool,
     scroll_wide: bool,
     wrap_code: bool,
@@ -318,7 +321,7 @@ thread_local! {
 impl Markdown {
     pub fn new(src: impl Into<String>) -> Markdown {
         Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, reveal: -1.0, streaming: false, on_link: None, on_link_secondary: None, on_link_hover: None, link_menu: true, link_look: None, link_help: None, link_ring: None, code_link: None,
-            on_task: None, tasks_read_only: false, selectable: false, copy_source: false, scroll_wide: false, wrap_code: false, wrap_anywhere: false, hard_breaks: false, tentative: None, highlighter: Highlighter::builtin(),
+            on_task: None, tasks_read_only: false, selectable: false, track_source: false, copy_source: false, scroll_wide: false, wrap_code: false, wrap_anywhere: false, hard_breaks: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
             diagram_frame: None, code_frame: None, diff_frame: None, code_wrap: None, quote_frame: None, link_favicon: None, emoji: None, images: None, on_image: None }
     }
@@ -429,6 +432,13 @@ impl Markdown {
     /// The highlight is [`MarkdownStyle::selection`].
     pub fn selectable(mut self, on: bool) -> Self {
         self.selectable = on;
+        self
+    }
+
+    /// With [`Self::selectable`], retains source byte maps for [`selection_source`]. Off by
+    /// default. This does not change the element paths or what selecting and copying draws.
+    pub fn track_source(mut self, on: bool) -> Self {
+        self.track_source = on;
         self
     }
 
@@ -658,6 +668,7 @@ impl Markdown {
                     self.tasks_read_only,
                     self.link_menu,
                     self.selectable,
+                    self.track_source,
                     self.scroll_wide,
                     self.wrap_code,
                     self.wrap_anywhere,
@@ -694,8 +705,11 @@ impl Markdown {
         let root_dir = dirs.of_slice(&blocks).or(self.tentative);
         let code_frame = (self.code_frame.is_some() || self.code_wrap.is_some() || self.wrap_code)
             .then(|| CodeWire { frame: self.code_frame, wrap: self.code_wrap, wrap_default: self.wrap_code });
+        let source: Option<Rc<str>> = (self.selectable && (self.track_source || self.copy_source)).then(|| self.src.into());
+        let selection_source = source.as_ref().filter(|_| self.track_source).cloned();
         let r = Renderer { s: style.clone(), highlights: self.highlights, reveal: self.reveal, streaming: self.streaming, on_link: self.on_link, on_link_secondary: self.on_link_secondary, on_link_hover: self.on_link_hover, link_menu: self.link_menu, link_look: self.link_look, link_help: self.link_help, link_ring: self.link_ring, code_link: self.code_link,
             on_task: self.on_task, tasks_read_only: self.tasks_read_only, selectable: self.selectable, scroll_wide: self.scroll_wide, wrap_anywhere: self.wrap_anywhere, hard_breaks: self.hard_breaks, tentative: self.tentative,
+            selection_source: selection_source.clone(),
             highlighter: self.highlighter, sources, next_source: Cell::new(0), next_diff: Cell::new(0), tasks, next_task: Cell::new(0),
             current_block_key: RefCell::new("b0".into()),
             #[cfg(feature = "mermaid")]
@@ -704,15 +718,17 @@ impl Markdown {
         let root = memo::with_renderer(&r, || {
             bidi::directed(r.blocks_with_dirs(&blocks, Some(&meta), &maps, &keys, true, &dirs), root_dir).selection_group(self.selectable)
         });
-        if !(self.selectable && self.copy_source) { return root; }
+        let root = if let Some(src) = selection_source { root.selection_source_root(src) } else { root };
+        let Some(src) = source.filter(|_| self.copy_source) else { return root };
         let names: Rc<[String]> = rendered_keys(blocks.len(), &keys).into();
-        let src: Rc<str> = self.src.into();
         root.selection_copy(move |sel| source_copy(&src, &starts, &names, sel))
     }
 }
 
 #[cfg(test)]
 mod hard_breaks_tests;
+#[cfg(test)]
+mod selection_tests;
 #[cfg(test)]
 mod style_tests;
 #[cfg(test)]

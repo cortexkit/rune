@@ -165,6 +165,7 @@ impl Renderer {
         e = e.text_highlights(self.text_highlights_for(&inl.text, map));
         let e = self.select(self.wire_link(self.link_icons(e, inl), inl));
         if !self.selectable { return e; }
+        let e = selection::attach(e, self.selection_map(map), 0..inl.text.len(), Vec::new());
         inl.spans.iter().filter(|s| matches!(s.2, Style::CodePad)).fold(e, |e, s| e.uncopied(s.0..s.1))
     }
 

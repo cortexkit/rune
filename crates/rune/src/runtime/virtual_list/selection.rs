@@ -4,11 +4,12 @@ mod collect;
 
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
+use std::rc::Rc;
 
 use taffy::style::{Display, FlexDirection};
 
 use super::phase::{self, Far, Selection};
-use super::{SelectedText, kept, same_keyed_path, trim_uncopied};
+use super::{SelectedSource, SelectedText, kept, same_keyed_path, trim_uncopied};
 use crate::el::{El, SelectionCopy, TextSpec};
 use crate::runtime::RuntimeCore;
 
@@ -72,7 +73,7 @@ pub(crate) fn collect_virtual_row_selection(
     let row_path = crate::runtime::flatten::node_path(list_path, Some(row_key), 0);
     walk_row_el(
         row_el, list_path, row_key, row_index, &row_path, "",
-        list_group, list_inert, list_selection_off, &mut order_in_row, texts, copy_providers,
+        list_group, None, list_inert, list_selection_off, &mut order_in_row, texts, copy_providers,
     );
 }
 
@@ -105,6 +106,7 @@ fn walk_row_el<'a>(
     path: &'a str,
     rel_path: &str,
     parent_group: Option<&'a str>,
+    parent_source: Option<&Rc<(String, Rc<str>)>>,
     parent_inert: bool,
     parent_selection_off: bool,
     order_in_row: &mut usize,
@@ -114,6 +116,8 @@ fn walk_row_el<'a>(
     let inert = parent_inert || el.flags.has(crate::el::ElFlags::INERT);
     let selection_off = crate::el::selection_off(el.cold.selection_enabled, parent_selection_off);
     let group = if el.flags.has(crate::el::ElFlags::SELECTION_GROUP) { Some(path) } else { parent_group };
+    let root = el.handlers.selection_source.as_ref().map(|src| Rc::new((path.to_owned(), src.clone())));
+    let source_root = root.as_ref().or(parent_source);
     if !inert && let Some(f) = el.handlers.get().and_then(|h| h.selection_copy.as_ref()) {
         copy_providers.push((path.to_owned(), f.clone()));
     }
@@ -135,6 +139,7 @@ fn walk_row_el<'a>(
             path: path.to_owned(),
             key: el.key.clone(),
             group_path: group.map(str::to_owned),
+            source_root: source_root.filter(|_| t.cold.selection_source_map.is_some()).cloned(),
             spec,
             tab_before: false,
         });
@@ -147,7 +152,7 @@ fn walk_row_el<'a>(
         let before_len = texts.len();
         walk_row_el(
             child, list_path, row_key, row_index, &child_path, &child_rel,
-            group, inert, selection_off, order_in_row, texts, copy_providers,
+            group, source_root, inert, selection_off, order_in_row, texts, copy_providers,
         );
         if texts.len() > before_len {
             if had_child_text {
@@ -158,7 +163,7 @@ fn walk_row_el<'a>(
     }
 }
 
-pub(super) fn offscreen_piece(t: &OffscreenText, range: Range<usize>, base: Option<&str>) -> SelectedText {
+pub(super) fn offscreen_piece(rt: &RuntimeCore, t: &OffscreenText, range: Range<usize>, base: Option<&str>) -> SelectedText {
     let path = match base {
         Some(b) if b == t.path => String::new(),
         Some(b) => t.path.strip_prefix(b).and_then(|p| p.strip_prefix('/')).unwrap_or(&t.path).to_owned(),
@@ -174,7 +179,12 @@ pub(super) fn offscreen_piece(t: &OffscreenText, range: Range<usize>, base: Opti
     let whole = !range.is_empty() && len > 0 && range.start <= full_a && range.end >= full_b;
     let text = t.spec.copy_slice(range.start as u32, range.end as u32).unwrap_or_default();
     let content = raw.get(range.clone()).unwrap_or_default().to_owned();
-    SelectedText { path, key: t.key.clone(), range, len, whole, text, content }
+    let source = t.spec.selected_source_range(range.clone()).and_then(|range| {
+        let (path, source) = t.source_root.as_ref().map(|root| (root.0.as_str(), &root.1))
+            .or_else(|| rt.selected_source_root(rt.live(&t.list_path)?))?;
+        Some(Box::new(SelectedSource { path: path.to_owned(), source: source.clone(), range }))
+    });
+    SelectedText { path, key: t.key.clone(), range, len, whole, text, content, source }
 }
 
 impl RuntimeCore {
