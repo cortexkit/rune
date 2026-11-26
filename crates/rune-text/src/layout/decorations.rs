@@ -256,7 +256,7 @@ impl TextSystem {
         }
     }
 
-    /// Rounded background fills and rings for `highlights` in device px.
+    /// Rounded background fills, rings and underlines for `highlights` in device px.
     #[allow(dead_code)]
     pub(crate) fn highlight_decorations(
         &self,
@@ -288,9 +288,13 @@ impl TextSystem {
             return;
         }
         let mut cache = (highlights.len() > 1).then(HighlightLineCache::default);
+        let mut line_ends = FxHashMap::default();
+        let mut underlines = Vec::new();
         for h in highlights {
             let (a, b) = ((h.start as usize).min(len), (h.end as usize).min(len));
-            if a >= b || (h.bg.a <= 0.0 && h.ring.is_none()) {
+            let background = !(h.bg.a <= 0.0 && h.ring.is_none());
+            let underline = h.underline.filter(|(c, _)| c.a > 0.0);
+            if a >= b || (!background && underline.is_none()) {
                 continue;
             }
             let pad = h.pad * scale;
@@ -301,7 +305,12 @@ impl TextSystem {
             match flow {
                 TextFlow::Single(l) => {
                     let boxes = range_boxes(l, a, b, false);
-                    push_highlight_boxes(l, 0, cache.as_mut(), boxes, a..b, origin, pad, vpad, radius, h.bg, ring, byte, None, out);
+                    if let Some(paint) = underline {
+                        push_highlight_underlines(l, 0, &boxes, origin, scale, paint, byte, &mut line_ends, &mut underlines);
+                    }
+                    if background {
+                        push_highlight_boxes(l, 0, cache.as_mut(), boxes, a..b, origin, pad, vpad, radius, h.bg, ring, byte, None, out);
+                    }
                 }
                 TextFlow::Paragraphs(pl) => {
                     let from = pl.paragraphs.partition_point(|q| q.end < a);
@@ -312,6 +321,11 @@ impl TextSystem {
                         let p = Piece::of_paragraph(k, q, pl.disjoint_spans);
                         let clipped = p.clip(a, b);
                         let mut boxes = clipped.map_or_else(Vec::new, |(sa, sb)| range_boxes(p.layout, sa, sb, false));
+                        let origin = [origin[0], origin[1] + p.y];
+                        if let Some(paint) = underline {
+                            push_highlight_underlines(p.layout, k, &boxes, origin, scale, paint, byte, &mut line_ends, &mut underlines);
+                        }
+                        if !background { continue; }
                         if k + 1 < pl.paragraphs.len() && a <= p.end && p.end < b {
                             if let Some((li, line)) = p.layout.lines().enumerate().last().filter(|_| !p.is_blank()) {
                                 let m = line.metrics();
@@ -336,10 +350,41 @@ impl TextSystem {
                             }
                         }
                         let (sa, sb) = clipped.unwrap_or((p.shaped(p.end), p.shaped(p.end)));
-                        push_highlight_boxes(p.layout, k, cache.as_mut(), boxes, sa..sb, [origin[0], origin[1] + p.y], pad, vpad, radius, h.bg, ring, byte, Some(pl.blank_box), out);
+                        push_highlight_boxes(p.layout, k, cache.as_mut(), boxes, sa..sb, origin, pad, vpad, radius, h.bg, ring, byte, Some(pl.blank_box), out);
                     }
                 }
             }
+            out.append(&mut underlines);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_highlight_underlines(
+    layout: &Layout<Ink>, para: usize, boxes: &[(parley::BoundingBox, usize)], origin: [f32; 2],
+    scale: f32, (color, dashed): (Color, bool), byte: u32, line_ends: &mut FxHashMap<(usize, usize), f32>,
+    out: &mut Vec<PaintedDeco>,
+) {
+    let height = scale.max(1.0);
+    for (bb, idx) in boxes {
+        let Some(line) = layout.get(*idx) else { continue };
+        let end = *line_ends.entry((para, *idx)).or_insert_with(|| super::underline::line_end(&line));
+        let (mut left, right) = super::underline::underline_edges_with_end(end, origin[0], bb.x0 as f32, bb.x1 as f32);
+        if !left.is_finite() || !right.is_finite() { continue; }
+        let y = (origin[1] + line.metrics().baseline + 2.0 * scale).round();
+        let mut push = |x, w| out.push(PaintedDeco::new(Deco { rect: [x, y, w, height], color, radius: 0.0 }, None, byte));
+        if !dashed {
+            if right > left { push(left, right - left); }
+            continue;
+        }
+        // Flat-ended dashes, clipped at this fragment's end, with open gaps between them.
+        let dash = (3.0 * height).round();
+        let gap = (2.0 * height).round();
+        while left < right {
+            let end = (left + dash).min(right);
+            if end <= left { break; }
+            push(left, end - left);
+            left = end + gap;
         }
     }
 }

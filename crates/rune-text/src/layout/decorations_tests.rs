@@ -870,3 +870,27 @@ fn strike_and_highlight_match_reference_for_unsorted_overlaps_bidi_and_paragraph
     }
     assert_eq!(deco_snapshot(&got_multi), deco_snapshot(&exp_multi), "multi-paragraph cached highlights must match single-highlight output");
 }
+
+#[test]
+fn a_highlight_underline_uses_span_underline_height_and_baselines_when_wrapped() {
+    let mut ts = TextSystem::default();
+    let src = "one two three four five six";
+    let style = TextStyle::new(14.0, 400.0);
+    let scale = 1.5;
+    let origin = [0.25, 20.25];
+    let spans = [Span::new(0, src.len()).underline(Color::WHITE)];
+    let layout = ts.layout_rich(src, &spans, style, scale, Some(90.0));
+    let mut span_decos = Vec::new();
+    ts.decorations(&layout, &spans, scale, origin, &mut span_decos);
+    assert!(span_decos.len() > 1, "the text wraps");
+    let highlight = TextHighlight::new(0..src.len(), Color::TRANSPARENT).underline(Color::WHITE);
+    let mut highlight_decos = Vec::new();
+    ts.highlight_decorations(&layout, &[highlight], src.len(), scale, origin, &mut highlight_decos);
+    let rows = |rects: Vec<[f32; 4]>| {
+        let mut rows: Vec<_> = rects.iter().map(|r| (r[1], r[3])).collect();
+        rows.dedup();
+        rows
+    };
+    assert_eq!(rows(highlight_decos.iter().map(|d| d.rect).collect()), rows(span_decos.iter().map(|d| d.rect).collect()));
+    assert!(highlight_decos.iter().all(|d| d.ring.is_none() && d.color == Color::WHITE));
+}

@@ -1,4 +1,4 @@
-//! Highlighted source ranges: match and current-match paint.
+//! Highlighted source ranges: match, current-match and underline paint.
 
 use super::*;
 
@@ -7,13 +7,16 @@ use super::*;
 /// [`Highlight::default()`] (or [`Highlight::new()`]) draws a standard match background from
 /// [`MarkdownStyle`]; [`Highlight::current()`] draws the active match with a stronger background
 /// and an inset border ring. Either may be customized with [`Highlight::bg`], [`Highlight::fg`],
-/// [`Highlight::ring`] and [`Highlight::key`].
+/// [`Highlight::ring`] and [`Highlight::key`]. An [`Highlight::underline`] or
+/// [`Highlight::underline_dashed`] without an explicit background uses only the paints it sets,
+/// instead of the theme's match colours.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Highlight {
     pub(crate) current: bool,
     pub(crate) bg: Option<Color>,
     pub(crate) fg: Option<Color>,
     pub(crate) ring: Option<(Color, f32)>,
+    pub(crate) underline: Option<(Color, bool)>,
     pub(crate) pad: Option<f32>,
     pub(crate) radius: Option<f32>,
     pub(crate) vpad: Option<f32>,
@@ -58,6 +61,17 @@ impl Highlight {
         self.ring = (width > 0.0 && width.is_finite()).then_some((color, width));
         self
     }
+    /// Draws a solid underline. Without [`Self::bg`], no match background, ring or glyph
+    /// colour is taken from the theme. Explicit [`Self::ring`] and [`Self::fg`] still apply.
+    pub fn underline(mut self, color: Color) -> Self {
+        self.underline = Some((color, false));
+        self
+    }
+    /// Like [`Self::underline`], with gaps between dashes.
+    pub fn underline_dashed(mut self, color: Color) -> Self {
+        self.underline = Some((color, true));
+        self
+    }
     /// Overrides the horizontal padding around each highlighted line, in points.
     pub fn pad(mut self, pad: f32) -> Self {
         self.pad = Some(pad);
@@ -84,9 +98,9 @@ impl Highlight {
 
 impl std::hash::Hash for Highlight {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let Highlight { current, bg, fg, ring, pad, radius, vpad, key } = self;
+        let Highlight { current, bg, fg, ring, underline, pad, radius, vpad, key } = self;
         let bits = |v: Option<f32>| v.map(|x| if x == 0.0 { 0 } else { x.to_bits() });
-        (current, bg, fg, ring.map(|(c, w)| (c, if w == 0.0 { 0 } else { w.to_bits() })), bits(*pad), bits(*radius), bits(*vpad), key).hash(state);
+        (current, bg, fg, ring.map(|(c, w)| (c, if w == 0.0 { 0 } else { w.to_bits() })), underline, bits(*pad), bits(*radius), bits(*vpad), key).hash(state);
     }
 }
 
