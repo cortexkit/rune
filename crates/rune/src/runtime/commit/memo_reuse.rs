@@ -364,6 +364,7 @@ fn same_handlers(
         drawn_rect,
         on_scroll_offset,
         selection_copy,
+        selection_source,
         on_selection_change,
         cursor,
         press_scale,
@@ -425,6 +426,7 @@ fn same_handlers(
         }
         && opt_rc_eq(&a.on_scroll_offset, on_scroll_offset)
         && opt_rc_eq(&a.selection_copy, selection_copy)
+        && opt_rc_eq(&a.selection_source, selection_source)
         && opt_rc_eq(&a.on_selection_change, on_selection_change)
         && a.cursor == *cursor
         && a.press_scale == *press_scale

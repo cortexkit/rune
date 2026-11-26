@@ -234,9 +234,10 @@ const PLAIN_TEXT: [&str; 4] = ["text", "txt", "plain", "plaintext"];
 /// tabs in a monospace `style` to four-column stops itself; in any other family it draws a tab
 /// as one space, so each tab is padded with uncopied spaces to the next stop: lines line up and a
 /// copy still gets the tab.
-fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, style: TextStyle) -> El {
+fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, style: TextStyle, map: Option<Rc<SpanMap>>, start: usize) -> El {
+    let window = start..start + code.len();
     if !code.contains('\t') || matches!(style.family, Family::Mono | Family::SystemMono) {
-        return rich(code.to_owned(), spans).text_highlights(highlights);
+        return selection::attach(rich(code.to_owned(), spans).text_highlights(highlights), map, window, Vec::new());
     }
     let mut shown = String::with_capacity(code.len() + code.len() / 8);
     // (source byte, shown byte, pad, padding so far including this tab's)
@@ -266,7 +267,10 @@ fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, 
         let r = hl.range();
         *hl = hl.clone().with_range(shift(r.start as u32) as usize..shift(r.end as u32) as usize);
     }
-    tabs.iter().fold(rich(shown, spans).text_highlights(highlights), |el, t| el.uncopied(t.1 + 1..t.1 + 1 + t.2))
+    let pads = || tabs.iter().map(|t| t.1 + 1..t.1 + 1 + t.2);
+    let el = pads().fold(rich(shown, spans).text_highlights(highlights), El::uncopied);
+    let source_pads = if map.is_some() { pads().filter(|r| !r.is_empty()).collect() } else { Vec::new() };
+    selection::attach(el, map, window, source_pads)
 }
 
 impl Renderer {
@@ -292,7 +296,7 @@ impl Renderer {
             None => (s.code_block_fill, s.code_block_border, s.code_text.unwrap_or(s.text)),
         };
         let spans = if shell.is_some() { Vec::new() } else { self.syntax_spans(code, source) };
-        let body = tabbed(code, spans, highlights, s.code_block).font(s.code_block).color(ink).by_line();
+        let body = tabbed(code, spans, highlights, s.code_block, self.selection_map(map), 0).font(s.code_block).color(ink).by_line();
         // Under `scroll_wide`, unwrapped code sits inside `scroll_x()` with unconstrained width
         // (`max_width = None`), so `wrap_anywhere().wrap_greedy()` has zero effect while unwrapped
         // and keeps `shape_key`/`style_key` identical across wrap toggles so already-shaped lines
@@ -346,6 +350,7 @@ impl Renderer {
     pub(in crate::markdown) fn diff(&self, src: &str, map: Option<&SpanMap>) -> El {
         let s = &self.s;
         let all_hl = self.text_highlights_for(src, map);
+        let map = self.selection_map(map);
         let mut c = col().role("code").dir(rune::Direction::Ltr).w_full().py(s.code_block_pad[1]).radius(s.code_block_radius).fill(s.code_block_fill).border(0.5, s.code_block_border).border_layout();
         let mut line_start = 0usize;
         let last = src.split('\n').count() - 1;
@@ -360,7 +365,6 @@ impl Renderer {
                     (a < b).then(|| h.clone().with_range((a - line_start)..(b - line_start)))
                 })
                 .collect();
-            line_start = line_end + 1;
             let line = line.strip_suffix('\r').unwrap_or(line);
             let header = ["@@", "diff ", "index ", "--- ", "+++ "].iter().any(|p| line.starts_with(p));
             let (tint, color) = match line.as_bytes().first() {
@@ -370,7 +374,9 @@ impl Renderer {
                 _ => (None, s.text),
             };
             let shown = if line.is_empty() { " " } else { line };
-            let mut line_text = tabbed(shown, Vec::new(), line_hl, s.code_block).font(s.code_block).color(color).wrap();
+            let line_map = if line.is_empty() { None } else { map.clone() };
+            let mut line_text = tabbed(shown, Vec::new(), line_hl, s.code_block, line_map, line_start).font(s.code_block).color(color).wrap();
+            line_start = line_end + 1;
             if self.wrap_anywhere {
                 line_text = line_text.wrap_anywhere();
             }
@@ -434,6 +440,7 @@ impl Renderer {
             .w_full()
             .child(self.with_reveal(text(label)).font(s.code_block).color(s.muted).w_full().a11y_hidden());
         let all_hl = self.text_highlights_for(&inl.text, Some(map));
+        let map = self.selection_map(Some(map));
         let ink = flow.ink.unwrap_or(s.text);
         let mut card = col()
             .key("deep-tail")
@@ -482,7 +489,7 @@ impl Renderer {
                 })
                 .collect();
             let is_last = end >= full.len();
-            let mut chunk_text = tabbed(slice, Vec::new(), chunk_hl, s.code_block).font(s.code_block).color(ink).wrap();
+            let mut chunk_text = tabbed(slice, Vec::new(), chunk_hl, s.code_block, map.clone(), start).font(s.code_block).color(ink).wrap();
             if self.wrap_anywhere {
                 chunk_text = chunk_text.wrap_anywhere();
             }

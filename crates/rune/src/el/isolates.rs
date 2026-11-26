@@ -116,6 +116,23 @@ impl TextSpec {
             let at = cold.uncopied.partition_point(|r| r.0 < b + before + MARK);
             cold.uncopied.insert(at, (b + before + MARK, b + before + 2 * MARK));
         }
+        if let Some(map) = cold.selection_source_map.take() {
+            cold.selection_source_map = Some(std::rc::Rc::new(move |r| {
+                // Both boundaries of an inserted mark map to the same authored byte.
+                let unmark = |byte: usize| {
+                    let mut removed = 0;
+                    for &(a, b, _) in &isolates {
+                        for at in [a as usize, b as usize] {
+                            if byte <= at + removed { return byte - removed; }
+                            removed += (byte - at - removed).min(MARK as usize);
+                        }
+                    }
+                    byte - removed
+                };
+                let r = unmark(r.start)..unmark(r.end);
+                if r.is_empty() { None } else { map(r) }
+            }));
+        }
         self.content = content;
         self.shape = None;
     }

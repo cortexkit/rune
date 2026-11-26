@@ -36,6 +36,7 @@ mod text_selection;
 pub(crate) use copy_join::CopyJoin;
 pub(crate) use selection_toolbar::OnPress;
 pub use text_selection::{SelectedText, SelectionChange, TextSelection};
+pub(crate) use text_selection::SelectedSource;
 
 /// The commit, the selection's ends and whether a press is making it: what a selection read
 /// from them depends on.
@@ -468,6 +469,7 @@ impl RuntimeCore {
                                     && x.len == y.len
                                     && x.whole == y.whole
                                     && x.text == y.text
+                                    && x.source == y.source
                                     && (x.path == y.path || same_keyed_path(&x.path, &y.path))
                             }))
                 }
@@ -497,7 +499,16 @@ impl RuntimeCore {
         let whole = !range.is_empty() && len > 0 && range.start <= full_a && range.end >= full_b;
         let text = n.text.as_ref().and_then(|t| t.copy_slice(range.start as u32, range.end as u32)).unwrap_or_default();
         let content = self.content_of(i).get(range.clone()).unwrap_or_default().to_owned();
-        SelectedText { path, key: n.key.clone(), range, len, whole, text, content }
+        let source = n.text.as_ref().and_then(|t| t.selected_source_range(range.clone()))
+            .and_then(|range| self.selected_source_root(i).map(|(path, source)| Box::new(SelectedSource { path: path.to_owned(), source: source.clone(), range })));
+        SelectedText { path, key: n.key.clone(), range, len, whole, text, content, source }
+    }
+
+    pub(crate) fn selected_source_root(&self, i: usize) -> Option<(&str, &Rc<str>)> {
+        std::iter::successors(Some(i), |&j| self.tree.nodes[j].parent).find_map(|j| {
+            let n = &self.tree.nodes[j];
+            n.handlers.selection_source.as_ref().map(|source| (n.path.as_str(), source))
+        })
     }
 
     /// What copying the selection puts on the clipboard: the nearest [`El::selection_copy`]

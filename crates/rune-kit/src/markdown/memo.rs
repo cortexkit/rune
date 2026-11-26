@@ -301,7 +301,7 @@ pub(super) fn with_renderer<R>(r: &Renderer, f: impl FnOnce() -> R) -> R {
 /// to compile here until it is either hashed in the base or guarded per block/link below.
 fn compute_base(r: &Renderer) -> (u64, u64) {
     let Renderer {
-        s, highlights, reveal, streaming, tasks_read_only, selectable, scroll_wide, wrap_anywhere, on_link, on_link_secondary,
+        s, highlights, reveal, streaming, tasks_read_only, selectable, selection_source, scroll_wide, wrap_anywhere, on_link, on_link_secondary,
         link_look: _, link_help: _, link_ring: _, link_favicon: _, code_link: _,
         highlighter: _, sources: _, next_source: _, next_diff: _, tasks: _, next_task: _, on_task: _,
         #[cfg(feature = "mermaid")]
@@ -312,6 +312,7 @@ fn compute_base(r: &Renderer) -> (u64, u64) {
     let mut h = PairHasher::new();
     (s, highlights, reveal.to_bits(), streaming, tasks_read_only, selectable, scroll_wide, wrap_anywhere,
         on_link.as_ref().map(|w| w.1), on_link_secondary.as_ref().map(|w| w.1)).hash(&mut h);
+    selection_source.is_some().hash(&mut h);
     h.finish128()
 }
 
@@ -351,7 +352,7 @@ fn hash_flow(f: Flow, h: &mut impl Hasher) {
     }
 }
 
-fn hash_span_map(m: &SpanMap, h: &mut impl Hasher) { m.0.hash(h); }
+fn hash_span_map(m: &SpanMap, h: &mut impl Hasher) { (&m.0, &m.1).hash(h); }
 
 fn hash_block_map(root: &BlockMap, h: &mut impl Hasher) {
     enum Step<'a> { Map(&'a BlockMap), Len(usize) }
@@ -525,7 +526,7 @@ impl Renderer {
             return None;
         }
         tasks.hash(&mut h);
-        if !self.highlights.is_empty() { hash_block_map(map, &mut h); }
+        if self.uses_source_maps() { hash_block_map(map, &mut h); }
         Some(h.finish128())
     }
 
@@ -563,7 +564,7 @@ impl Renderer {
             return None;
         }
         tasks.hash(&mut h);
-        if !self.highlights.is_empty() {
+        if self.uses_source_maps() {
             imap.len().hash(&mut h);
             for m in imap { hash_block_map(m, &mut h); }
         }
@@ -578,7 +579,7 @@ impl Renderer {
             Some(s) => (1u8, &s.lang, s.len, s.coloured, s.open).hash(&mut h),
             None => 0u8.hash(&mut h),
         }
-        if !self.highlights.is_empty() && let Some(m) = map { hash_span_map(m, &mut h); }
+        if self.uses_source_maps() && let Some(m) = map { hash_span_map(m, &mut h); }
         Some(h.finish128())
     }
 
@@ -586,7 +587,7 @@ impl Renderer {
         if open { return None; }
         let mut h = PairHasher::new();
         (6u8, self.base_hash(), src).hash(&mut h);
-        if !self.highlights.is_empty() && let Some(m) = map { hash_span_map(m, &mut h); }
+        if self.uses_source_maps() && let Some(m) = map { hash_span_map(m, &mut h); }
         Some(h.finish128())
     }
 
@@ -624,7 +625,7 @@ impl Renderer {
             None => 0u8.hash(&mut h),
             Some(ws) => { 1u8.hash(&mut h); for w in ws { w.to_bits().hash(&mut h); } }
         }
-        if !self.highlights.is_empty() {
+        if self.uses_source_maps() {
             maps.len().hash(&mut h);
             for m in maps { hash_span_map(m, &mut h); }
         }

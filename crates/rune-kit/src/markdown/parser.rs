@@ -396,7 +396,7 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                     let inl = b.inline();
                     let start = inl.1.text.len();
                     inl.1.text.push_str(&t);
-                    inl.3.push(range, start..inl.1.text.len());
+                    inl.3.push_text(src, range, &t, start);
                 }
             }
             Event::Code(t) => {

@@ -5,6 +5,8 @@ use crate::el::{Align, LinkFn, LinkSecondaryFn};
 use crate::text::{Link, Span};
 use crate::tok::TextStyle;
 
+pub(crate) type SelectionSourceMap = std::rc::Rc<dyn Fn(std::ops::Range<usize>) -> Option<std::ops::Range<usize>>>;
+
 /// A text element's record. What most texts set stays inline; what few set (links, rings,
 /// pills, copy rules, a run to measure in, live text) waits behind `cold`, allocated on the
 /// first write, so building a plain text allocates one small block.
@@ -97,6 +99,7 @@ pub(crate) struct TextCold {
     pub(crate) selection_style: Option<crate::SelectionStyle>,
     /// See [`El::uncopied`](crate::El::uncopied): byte ranges of `content`, sorted.
     pub(crate) uncopied: Vec<(u32, u32)>,
+    pub(crate) selection_source_map: Option<SelectionSourceMap>,
     /// See [`El::copy_breaks`](crate::El::copy_breaks): newlines before and after it.
     pub(crate) copy_breaks: [u8; 2],
     /// See [`El::copy_prefix`](crate::El::copy_prefix).
@@ -144,6 +147,7 @@ impl Empty for TextCold {
         selection: crate::el::DEFAULT_SELECTION,
         selection_style: None,
         uncopied: Vec::new(),
+        selection_source_map: None,
         copy_breaks: [1, 1],
         copy_prefix: None,
         rings: Vec::new(),
@@ -455,6 +459,15 @@ impl TextSpec {
         }
         self.content = shown;
         self.source = Some(Box::new(source));
+    }
+
+    pub(crate) fn selected_source_range(&self, mut range: std::ops::Range<usize>) -> Option<std::ops::Range<usize>> {
+        let map = self.cold.selection_source_map.as_ref()?;
+        if range.is_empty() { return None; }
+        if let Some(source) = &self.source {
+            range = source.source(range.start as u32, false) as usize..source.source(range.end as u32, true) as usize;
+        }
+        map(range)
     }
 }
 

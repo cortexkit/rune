@@ -108,7 +108,7 @@ impl RuntimeCore {
                 EndRef::Offscreen(vi, ti) => {
                     let t = self.offscreen_text(vi, ti);
                     if a >= b || b > t.spec.content.len() { return None; }
-                    let piece = offscreen_piece(t, a..b, base_path);
+                    let piece = offscreen_piece(self, t, a..b, base_path);
                     let text = piece.text().to_owned();
                     Some(TextSelection { texts: vec![piece], text, backward: self.selection_backward(), truncated: false })
                 }
@@ -141,7 +141,7 @@ impl RuntimeCore {
                     let a = if end_ref == first_end { first_byte.min(len) } else { 0 };
                     let b = if end_ref == last_end { last_byte.min(len) } else { len };
                     if a >= b { continue; }
-                    let piece = offscreen_piece(t, a..b, base_path);
+                    let piece = offscreen_piece(self, t, a..b, base_path);
                     let capped = out.push(&t.spec, a..b, piece.text(), t.tab_before, MAX_VIRTUAL_COPY_BYTES);
                     texts.push(piece);
                     if capped {
@@ -244,7 +244,7 @@ impl RuntimeCore {
                         let a = if ord == first_ord { first_byte.min(len) } else { 0 };
                         let b = if ord == last_ord { last_byte.min(len) } else { len };
                         if a >= b { continue; }
-                        let piece = offscreen_piece(t, a..b, base_path);
+                        let piece = offscreen_piece(self, t, a..b, base_path);
                         let capped = out.push(&t.spec, a..b, piece.text(), !first_in_row && t.tab_before, MAX_VIRTUAL_COPY_BYTES);
                         texts.push(piece);
                         first_in_row = false;

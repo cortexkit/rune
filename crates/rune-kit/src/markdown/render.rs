@@ -24,6 +24,7 @@ pub(super) struct Renderer {
     /// `Markdown::code_link`.
     pub(super) code_link: Option<CodeLink>,
     pub(super) selectable: bool,
+    pub(super) selection_source: Option<Rc<str>>,
     /// `Markdown::scroll_wide`.
     pub(super) scroll_wide: bool,
     /// `Markdown::wrap_anywhere`.

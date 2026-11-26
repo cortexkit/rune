@@ -5,6 +5,25 @@
 use std::ops::Range;
 use std::rc::Rc;
 
+impl crate::El {
+    /// Names the source for selectable text maps under this element. An inner root takes
+    /// precedence over an outer root, independently of [`Self::selection_group`].
+    pub fn selection_source_root(mut self, source: Rc<str>) -> Self {
+        self.handlers.selection_source = Some(source);
+        self
+    }
+
+    /// Maps a selected byte range of this text's content to a range in its nearest
+    /// [`Self::selection_source_root`]. Return `None` when no source bytes are covered.
+    /// Ranges passed to the map are in the authored content, before casing or inserted isolates.
+    pub fn selection_source_map(mut self, map: impl Fn(Range<usize>) -> Option<Range<usize>> + 'static) -> Self {
+        if let Some(t) = &mut self.text {
+            t.cold.selection_source_map = Some(Rc::new(map));
+        }
+        self
+    }
+}
+
 /// A selection of [`El::selectable`](crate::El::selectable) text, as
 /// [`Tx::text_selection`](crate::Tx::text_selection) reads it and an
 /// [`El::selection_copy`](crate::El::selection_copy) element sees it.
@@ -56,6 +75,20 @@ pub struct SelectedText {
     pub(super) text: String,
     /// The selected bytes of the content, as drawn.
     pub(super) content: String,
+    pub(super) source: Option<Box<SelectedSource>>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct SelectedSource {
+    pub path: String,
+    pub source: Rc<str>,
+    pub range: Range<usize>,
+}
+
+impl std::fmt::Debug for SelectedSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SelectedSource").field("path", &self.path).field("range", &self.range).finish()
+    }
 }
 
 impl SelectedText {
@@ -67,6 +100,11 @@ impl SelectedText {
     pub fn key(&self) -> Option<&str> { self.key.as_deref() }
     /// The selected bytes of the text's content, empty when none are.
     pub fn range(&self) -> Range<usize> { self.range.clone() }
+    /// The nearest source root's whole path, its source, and the selected bytes of that
+    /// source, when this text supplies an [`El::selection_source_map`](crate::El::selection_source_map).
+    pub fn source(&self) -> Option<(&str, &Rc<str>, Range<usize>)> {
+        self.source.as_ref().map(|s| (s.path.as_str(), &s.source, s.range.clone()))
+    }
     /// The length in bytes of the text's content.
     pub fn len(&self) -> usize { self.len }
     /// The text has no content.
