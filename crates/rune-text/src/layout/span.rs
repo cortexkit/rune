@@ -728,6 +728,9 @@ pub struct TextHighlight {
     pub fg: Option<Color>,
     #[doc(hidden)]
     pub ring: Option<(Color, f32)>,
+    /// Underline colour and whether the line is dashed.
+    #[doc(hidden)]
+    pub underline: Option<(Color, bool)>,
     #[doc(hidden)]
     pub pad: f32,
     #[doc(hidden)]
@@ -747,6 +750,7 @@ impl TextHighlight {
             bg,
             fg: None,
             ring: None,
+            underline: None,
             pad: 1.5,
             radius: 4.0,
             vpad: 1.0,
@@ -761,6 +765,16 @@ impl TextHighlight {
     /// Inset `c` border ring `width` points wide inside the rounded background on each line.
     pub fn ring(mut self, c: Color, width: f32) -> Self {
         self.ring = (width > 0.0 && width.is_finite()).then_some((c, width));
+        self
+    }
+    /// A solid line beneath the highlighted text, at a link underline's position and thickness.
+    pub fn underline(mut self, c: Color) -> Self {
+        self.underline = Some((c, false));
+        self
+    }
+    /// A dashed line beneath the highlighted text, at a link underline's position and thickness.
+    pub fn underline_dashed(mut self, c: Color) -> Self {
+        self.underline = Some((c, true));
         self
     }
     /// Horizontal padding around each line's background, in points (`1.5` by default).

@@ -115,9 +115,16 @@ impl Renderer {
     /// Resolves `hl` against [`MarkdownStyle`] into a [`TextHighlight`] for `range`.
     fn make_text_highlight(&self, idx: usize, range: Range<usize>, hl: &Highlight) -> TextHighlight {
         let s = &self.s;
-        let bg = hl.bg.unwrap_or(if hl.current { s.highlight_current_bg } else { s.highlight_bg });
-        let fg = hl.fg.or(if hl.current { s.highlight_current_fg } else { s.highlight_fg });
-        let ring = hl.ring.or(if hl.current { s.highlight_current_ring } else { s.highlight_ring });
+        let (default_bg, default_fg, default_ring) = if hl.underline.is_some() && hl.bg.is_none() {
+            (Color::TRANSPARENT, None, None)
+        } else if hl.current {
+            (s.highlight_current_bg, s.highlight_current_fg, s.highlight_current_ring)
+        } else {
+            (s.highlight_bg, s.highlight_fg, s.highlight_ring)
+        };
+        let bg = hl.bg.unwrap_or(default_bg);
+        let fg = hl.fg.or(default_fg);
+        let ring = hl.ring.or(default_ring);
         let key = hl.key.clone().unwrap_or_else(|| Markdown::highlight_key(idx));
         let mut th = TextHighlight::new(range, bg).key(key);
         if let Some(c) = fg {
@@ -125,6 +132,9 @@ impl Renderer {
         }
         if let Some((rc, rw)) = ring {
             th = th.ring(rc, rw);
+        }
+        if let Some((color, dashed)) = hl.underline {
+            th = if dashed { th.underline_dashed(color) } else { th.underline(color) };
         }
         if let Some(pad) = hl.pad {
             th = th.pad(pad);
