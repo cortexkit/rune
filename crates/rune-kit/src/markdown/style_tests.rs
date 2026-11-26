@@ -253,6 +253,7 @@ fn inline_code_text_colours_plain_code_spans_and_preserves_links_and_code_links(
         on_task: None,
         tasks_read_only: false,
         selectable: false,
+        selection_source: None,
         scroll_wide: false,
         wrap_anywhere: false,
         hard_breaks: false,

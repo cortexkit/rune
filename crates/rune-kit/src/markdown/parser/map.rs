@@ -4,7 +4,11 @@ use super::super::*;
 
 /// Maps source UTF-8 byte ranges to rendered text UTF-8 byte ranges.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(in crate::markdown) struct SpanMap(pub(in crate::markdown) Vec<(Range<usize>, Range<usize>)>);
+pub(in crate::markdown) struct SpanMap(
+    pub(in crate::markdown) Vec<(Range<usize>, Range<usize>)>,
+    // Selection uses the full escape and entity when even a part of its output is selected.
+    pub(in crate::markdown) Vec<(Range<usize>, Range<usize>)>,
+);
 
 impl SpanMap {
     pub(super) fn push(&mut self, src: Range<usize>, out: Range<usize>) {
@@ -24,6 +28,20 @@ impl SpanMap {
         self.0.push((src, out));
     }
 
+    pub(super) fn push_text(&mut self, src: &str, range: Range<usize>, text: &str, out: usize) {
+        // The parser reports escaped punctuation starting after the backslash. Keep the
+        // escape with that character, not with the other characters in its text event.
+        if text.as_bytes().first().is_some_and(u8::is_ascii_punctuation)
+            && src.get(range.clone()) == Some(text)
+            && src.as_bytes()[..range.start].iter().rev().take_while(|&&b| b == b'\\').count() % 2 == 1
+        {
+            self.1.push((range.start - 1..range.start + 1, out..out + 1));
+        } else if !text.is_empty() && range.len() == text.len() && src.get(range.clone()) != Some(text) {
+            self.1.push((range.clone(), out..out + text.len()));
+        }
+        self.push(range, out..out + text.len());
+    }
+
     pub(in crate::markdown) fn truncate_out(&mut self, len: usize) {
         self.0.retain_mut(|(src, out)| {
             if out.start >= len {
@@ -38,13 +56,17 @@ impl SpanMap {
             }
             src.start < src.end && out.start < out.end
         });
+        self.1.retain_mut(|(_, out)| {
+            out.end = out.end.min(len);
+            out.start < out.end
+        });
     }
 
     pub(in crate::markdown) fn shift_src(&mut self, offset: usize) {
         if offset == 0 {
             return;
         }
-        for (src, _) in &mut self.0 {
+        for (src, _) in self.0.iter_mut().chain(&mut self.1) {
             src.start += offset;
             src.end += offset;
         }

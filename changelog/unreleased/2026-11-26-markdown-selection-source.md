@@ -1,0 +1,1 @@
+- **`markdown::selection_source`: the Markdown source bytes covered by a text selection.** Use `Markdown::track_source(true)` on a selectable view, then pass its source, a `TextSelection`, and the view's key or element path. The result is one UTF-8 byte range, including any Markdown syntax between the selected characters, without changing layout, element paths, or copied text.

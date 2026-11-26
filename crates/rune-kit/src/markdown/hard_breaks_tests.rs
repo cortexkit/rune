@@ -139,7 +139,7 @@ fn soft_breaks_in_every_inline_context_match_hard_breaks_and_default_stays_commo
                     s: style, highlights: Vec::new(), reveal: -1.0, streaming: false,
                     on_link: None, on_link_secondary: None, on_link_hover: None, link_menu: true,
                     link_look: None, link_help: None, link_ring: None, code_link: None,
-                    on_task: None, tasks_read_only: false, selectable: false, scroll_wide: false,
+                    on_task: None, tasks_read_only: false, selectable: false, selection_source: None, scroll_wide: false,
                     wrap_anywhere: false, hard_breaks: true, tentative: None,
                     highlighter: Highlighter::builtin(), sources: Rc::from([]),
                     next_source: Cell::new(0), next_diff: Cell::new(0),
