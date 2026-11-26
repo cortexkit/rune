@@ -333,7 +333,7 @@ impl Markdown {
     /// reachable by [`Tx::scroll_into_view`](rune::Tx::scroll_into_view) and
     /// [`Cx::layout`](rune::Cx::layout) under its [`Highlight::key`], or under
     /// [`Markdown::highlight_key`]`(i)` when no key was set on it.
-    /// Backgrounds, rings and foreground colours are paint-only. Matches add no layout nodes;
+    /// Backgrounds, rings, underlines and foreground colours are paint-only. Matches add no layout nodes;
     /// [`Runtime::elements`](rune::Runtime::elements) reports a `mark` per rendered fragment.
     /// Empty/out-of-source ranges paint nothing; partial UTF-8 characters expand to boundaries.
     ///
@@ -727,6 +727,8 @@ impl Markdown {
 
 #[cfg(test)]
 mod hard_breaks_tests;
+#[cfg(test)]
+mod highlight_tests;
 #[cfg(test)]
 mod selection_tests;
 #[cfg(test)]

@@ -110,6 +110,7 @@ b";
         bg: Color::WHITE,
         fg: None,
         ring: None,
+        underline: None,
         pad: 0.0,
         radius: 0.0,
         vpad: 0.0,

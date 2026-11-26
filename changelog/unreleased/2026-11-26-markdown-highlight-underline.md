@@ -1,0 +1,1 @@
+- **`Highlight::underline` and `Highlight::underline_dashed`: underline a Markdown source range.** The line follows the highlighted text across wraps at the same height and thickness as a link underline. With no explicit background, the underline does not pick up the theme's match fill, ring or glyph colour. Its key still names the range's box for layout reads and scrolling.
