@@ -63,6 +63,11 @@ pub struct MarkdownStyle {
     /// Header cell padding (x, y) when it differs from the body's.
     pub(super) table_head_pad: Option<[f32; 2]>,
     pub(super) table_full_width: bool,
+    /// The hairline between columns (`None`: none).
+    pub(super) table_column_rule: Option<Color>,
+    /// The overlay on the body row under the pointer (`None`: none).
+    pub(super) table_row_hover: Option<Color>,
+    pub(super) table_shrink: TableShrink,
     /// Space above and below paragraphs, headings (levels 1 to 3, then 4+) and images.
     pub(super) paragraph_margin: [f32; 2],
     pub(super) heading_margin: [[f32; 2]; 4],
@@ -146,6 +151,20 @@ pub(super) struct TableFrame {
     pub(super) pad: f32,
 }
 
+/// How a table shares out a width too small for every column's content (see
+/// [`MarkdownStyle::table_shrink`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum TableShrink {
+    /// Every column narrows in proportion to its content, as a browser's automatic table
+    /// layout does: a short column gives up room along with the long ones.
+    #[default]
+    Proportional,
+    /// The widest columns narrow first. Every column takes an equal share of the width; one
+    /// whose content needs less keeps its content's width and leaves the rest to the others.
+    /// So a column of short labels or numbers stays on one line beside a column of prose.
+    WidestFirst,
+}
+
 /// The card a table's body rows sit on (see [`MarkdownStyle::table_body`]).
 #[derive(Clone, Debug)]
 pub(super) struct TableBody {
@@ -224,6 +243,9 @@ impl MarkdownStyle {
             table_body: None,
             table_head_pad: None,
             table_full_width: false,
+            table_column_rule: None,
+            table_row_hover: None,
+            table_shrink: TableShrink::Proportional,
             paragraph_margin: [0.0, 12.0],
             heading_margin: [[28.0, 12.0], [24.0, 10.0], [20.0, 8.0], [20.0, 8.0]],
             image_margin: [24.0, 24.0],
@@ -712,6 +734,9 @@ impl std::hash::Hash for MarkdownStyle {
             ref table_body,
             table_head_pad,
             table_full_width,
+            table_column_rule,
+            table_row_hover,
+            table_shrink,
             paragraph_margin,
             heading_margin,
             image_margin,
@@ -749,6 +774,7 @@ impl std::hash::Hash for MarkdownStyle {
             .hash(state);
         (table_outline, table_rule, table_head_fill, table_head_text, table_head_rule, table_head_weight.map(f32_bits), table_tabular, table_font).hash(state);
         ([f32_bits(table_pad[0]), f32_bits(table_pad[1])], table_flush_left, table_head_pad.map(|p| p.map(f32_bits)), table_full_width, paragraph_margin.map(f32_bits), heading_margin.map(|m| m.map(f32_bits)), image_margin.map(f32_bits), table_margin.map(f32_bits), code_margin.map(f32_bits)).hash(state);
+        (table_column_rule, table_row_hover, table_shrink).hash(state);
         table_frame.map(|TableFrame { fill, ring, pad }| (fill, ring, f32_bits(pad))).hash(state);
         (table_bar, text_width.map(f32_bits), prose_width.map(f32_bits), f32_bits(wide_fade), f32_bits(math_scale), link_icon.map(|l| l.map(f32_bits))).hash(state);
         match table_body {

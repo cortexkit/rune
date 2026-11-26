@@ -2,7 +2,7 @@
 //! flex growth so every row's cells line up without a grid.
 
 use super::*;
-use super::style::{TableBody, TableFrame};
+use super::style::{TableBody, TableFrame, TableShrink};
 
 /// Estimated bytes of column widths kept beyond the tables on screen.
 const WIDTHS_BYTES: usize = 1 << 20;
@@ -32,8 +32,9 @@ struct RowWidths {
 /// A browser's automatic table layout (`table-layout: auto`) in `avail` points: columns in
 /// proportion to their widest content when it all fits (`full`, a `width: 100%` table) or at
 /// it (an auto-width one); between their narrowest and widest, by how much each can give, when
-/// only the narrowest fits; and at their narrowest otherwise, overflowing.
-fn auto_layout(natural: &[f32], fit: &[f32], avail: f32, full: bool) -> Vec<f32> {
+/// only the narrowest fits; and at their narrowest otherwise, overflowing. `shrink` picks how
+/// the columns share the width in the middle case.
+pub(super) fn auto_layout(natural: &[f32], fit: &[f32], avail: f32, full: bool, shrink: TableShrink) -> Vec<f32> {
     let (widest, narrowest): (f32, f32) = (natural.iter().sum(), fit.iter().sum());
     if widest <= avail {
         let k = if full && widest > 0.0 { avail / widest } else { 1.0 };
@@ -42,9 +43,31 @@ fn auto_layout(natural: &[f32], fit: &[f32], avail: f32, full: bool) -> Vec<f32>
     if narrowest >= avail || widest <= narrowest {
         return fit.to_vec();
     }
+    if shrink == TableShrink::WidestFirst {
+        return widest_first(natural, fit, avail);
+    }
     let k = (avail - narrowest) / (widest - narrowest);
     natural.iter().zip(fit).map(|(w, f)| f + (w - f).max(0.0) * k).collect()
 }
+
+/// [`TableShrink::WidestFirst`] in `avail` points, which lie between the columns' narrowest and
+/// widest totals: every column is as wide as one common share, but never wider than its content
+/// (`natural`) nor narrower than its longest word (`fit`). The share that uses up `avail` is
+/// found by halving; 40 halvings settle it far below a device pixel for any table.
+fn widest_first(natural: &[f32], fit: &[f32], avail: f32) -> Vec<f32> {
+    let at = |share: f32| natural.iter().zip(fit).map(move |(w, f)| share.max(f.min(*w)).min(*w));
+    let (mut low, mut high) = (0.0f32, natural.iter().copied().fold(0.0, f32::max));
+    for _ in 0..40 {
+        let share = (low + high) / 2.0;
+        if at(share).sum::<f32>() > avail { high = share } else { low = share }
+    }
+    at(low).collect()
+}
+
+/// A cell's flex growth under [`TableShrink::WidestFirst`]. Beside it, the spare width a
+/// full-width table shares out once every cell has its content's width grows by fractions that
+/// add up to one, so that spare width is not handed out while any cell can still grow.
+const CELL_GROW: f32 = 1.0e6;
 
 thread_local! {
     static WIDTHS: RefCell<Budget<(u64, u64), Rc<Columns>>> = RefCell::new(Budget::new(WIDTHS_BYTES));
@@ -190,6 +213,28 @@ impl MarkdownStyle {
         self.table_full_width = on;
         self
     }
+    /// A hairline between columns, in `c`, or `None` for none (the default). It is drawn at the
+    /// leading edge of every column after the first, the full height of the row, over the row's
+    /// fill and taking no room, so the columns keep their widths.
+    pub fn table_column_rules(mut self, c: Option<Color>) -> Self {
+        self.table_column_rule = c;
+        self
+    }
+    /// An overlay drawn over a body row while the pointer is over it, or `None` for none (the
+    /// default), as a web table's `tbody tr:hover` sets a background. The header row never
+    /// takes it.
+    pub fn table_row_hover(mut self, c: Option<Color>) -> Self {
+        self.table_row_hover = c;
+        self
+    }
+    /// How the columns share a width too small for their content
+    /// ([`TableShrink::Proportional`] by default). A table that scrolls sideways at its
+    /// columns' full widths ([`Markdown::scroll_wide`] without [`Self::text_width`]) never
+    /// narrows a column, so this changes nothing there.
+    pub fn table_shrink(mut self, how: TableShrink) -> Self {
+        self.table_shrink = how;
+        self
+    }
     /// Whether cells follow their column's `:-:` and `--:` alignment (on by default). Off, every
     /// cell starts at its column's left, as a web table whose CSS sets `text-align: start`.
     pub fn table_column_align(mut self, on: bool) -> Self {
@@ -279,7 +324,7 @@ impl Renderer {
         // inside it scrolls.
         let fixed = s.text_width.filter(|_| self.scroll_wide).map(|w| {
             let avail = (w - self.flow.get().inset - 2.0 * inset).max(0.0);
-            let widths = auto_layout(&cols.natural, &cols.fit, avail, s.table_full_width);
+            let widths = auto_layout(&cols.natural, &cols.fit, avail, s.table_full_width, s.table_shrink);
             let over = widths.iter().sum::<f32>() > avail + 0.5;
             (widths, over)
         });
@@ -303,7 +348,11 @@ impl Renderer {
         let rule = |key: String| el().key(key).w_full().h(0.5).fill(s.table_rule).a11y_hidden();
         let row_at = |i: usize, cells: &[Inline]| {
             let rmap = row_maps.get(i).map_or(&[][..], Vec::as_slice);
-            self.table_row(cells, rmap, t, &cols, widths, body_font, s.text, s.table_pad, "cell").key(format!("r{i}"))
+            let row = self.table_row(cells, rmap, t, &cols, widths, body_font, s.text, s.table_pad, "cell").key(format!("r{i}"));
+            match s.table_row_hover {
+                Some(c) => row.hover(c),
+                None => row,
+            }
         };
         if let Some(body) = &s.table_body {
             // The frame doesn't clip, so the card's shadow shows past it; the header row and
@@ -455,17 +504,52 @@ impl Renderer {
             // a wider row widens columns in proportion and a narrower one shrinks them as
             // without it. A table that scrolls never shrinks a column below its content.
             let cell = col().key(format!("c{j}")).role(cell_role);
+            // Widest first, where flex layout shares the width: every cell grows from nothing
+            // at one rate and stops at its content's width, so a narrow row is handed out in
+            // equal shares and a short column keeps its content whole. A full-width table has
+            // width left once every cell has stopped; `spare` is this column's part of it.
+            let widest_first = self.s.table_shrink == TableShrink::WidestFirst && !self.scroll_wide;
+            let mut spare = 0.0;
             let cell = match (widths.and_then(|w| w.get(j)), self.s.table_full_width && total > 0.0, self.scroll_wide) {
                 (Some(w), ..) => cell.w(*w),
+                (None, full, _) if widest_first => {
+                    if full {
+                        spare = natural / total;
+                    }
+                    cell.grow(CELL_GROW).min_w(*min).max_w(*natural)
+                }
                 (None, false, _) => cell.w(*natural).shrink().min_w(*min),
                 (None, true, false) => cell.w_frac(natural / total).shrink().min_w(*min),
                 (None, true, true) => cell.w_frac(natural / total).shrink().min_w(*natural),
             };
-            r = r.child(
+            // The spare width goes on the side the column's text does not start from, so the
+            // text keeps its alignment in the wider column.
+            let (before, after) = match align {
+                Align::Start => (0.0, spare),
+                Align::Center => (spare / 2.0, spare / 2.0),
+                Align::End => (spare, 0.0),
+            };
+            let gap = |side: &str, share: f32| el().key(format!("c{j}{side}")).grow(share).a11y_hidden();
+            // The column's rule stands on whatever starts the column. A row stretches its
+            // children to its own height, so the rule runs the whole row beside a taller cell.
+            let rule = self.s.table_column_rule.filter(|_| j > 0);
+            let leading = if table_dir == Some(rune::Direction::Rtl) { [0.0, 0.5, 0.0, 0.0] } else { [0.0, 0.0, 0.0, 0.5] };
+            let ruled = |e: El, first: bool| match rule.filter(|_| first) {
+                Some(c) => e.border_sides(leading, c),
+                None => e,
+            };
+            if before > 0.0 {
+                r = r.child(ruled(gap("<", before), true));
+            }
+            r = r.child(ruled(
                 // Clipped: a word wider than a shrunk column (or a row still streaming in) must
                 // not run into the next column.
                 cell.pl(self.pad_left(j, pad_x)).pr(pad_x).py(pad_y).clip_soft(0.0).child(self.select_inline(content, inl, maps.get(j))),
-            );
+                before <= 0.0,
+            ));
+            if after > 0.0 {
+                r = r.child(gap(">", after));
+            }
         }
         r
     }
