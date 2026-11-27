@@ -485,7 +485,7 @@ impl RuntimeCore {
     pub(in crate::runtime) fn link_up(&mut self, path: &str, k: usize, x: f32, y: f32, button: crate::PointerButton) {
         let Some(i) = self.tree.nodes.iter().position(|n| n.path == path) else { return };
         if self.link_at(i, x, y) == Some(k) {
-            self.frame.queue.push(Action::Link(path.to_owned(), k, button));
+            self.frame.queue.push(Action::Link(path.to_owned(), k, button, PressSource::Pointer));
         }
     }
 
