@@ -18,10 +18,12 @@ pub(crate) const IDLE: f64 = 60.0;
 
 #[derive(Default)]
 pub(crate) struct CaretBlink {
-    /// The caret last painted: its field and edit state, hashed.
-    key: u64,
-    /// When that caret last changed, on the runtime clock.
-    since: f64,
+    /// The last blinking field and edit state, hashed, with the clock time it last changed.
+    started: Option<(u64, f64)>,
+    /// A field caret in the current paint, even if its blink phase was off.
+    painting: bool,
+    /// Whether the completed paint had a field caret for a focus change to affect.
+    painted: bool,
 }
 
 /// What a painted caret does this frame.
@@ -32,6 +34,23 @@ pub(crate) struct Phase {
 }
 
 impl CaretBlink {
+    pub(super) fn finish_paint(&mut self) {
+        // A blur or a range selection can remove the caret and later restore it with the same key.
+        self.painted = std::mem::take(&mut self.painting);
+        if !self.painted {
+            self.started = None;
+        }
+    }
+
+    /// Whether a window focus change needs a paint to start or stop blinking.
+    pub(in crate::runtime) fn window_focus_changed(&mut self, focused: bool, now: f64) -> bool {
+        let was_blinking = self
+            .started
+            .take()
+            .is_some_and(|(_, since)| now - since < IDLE);
+        self.painted && (focused || was_blinking)
+    }
+
     /// The phase at `now` of the caret painted for `field` with `edit`. `blinks` is false while
     /// the caret should hold still: the window isn't focused, or motion is reduced.
     pub(crate) fn phase(
@@ -41,21 +60,29 @@ impl CaretBlink {
         now: f64,
         blinks: bool,
     ) -> Phase {
-        let key = caret_key(field, edit);
-        if key != self.key {
-            self.key = key;
-            self.since = now;
-        }
+        self.painting = true;
         if !blinks {
-            self.since = now;
+            self.started = None;
             return Phase {
                 shown: true,
                 wake: None,
             };
         }
-        phase_at(now - self.since)
+        let key = caret_key(field, edit);
+        let since = match self.started {
+            Some((old, since)) if old == key => since,
+            _ => {
+                self.started = Some((key, now));
+                now
+            }
+        };
+        phase_at(now - since)
     }
 }
+
+#[cfg(test)]
+#[path = "caret_blink_tests.rs"]
+mod paint_tests;
 
 /// The phase `elapsed` seconds after the caret last changed.
 pub(crate) fn phase_at(elapsed: f64) -> Phase {

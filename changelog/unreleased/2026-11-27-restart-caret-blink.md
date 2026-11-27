@@ -1,0 +1,1 @@
+- A text caret starts shown for a full half second when its window regains focus or the field regains focus, even if it was hidden when focus left.

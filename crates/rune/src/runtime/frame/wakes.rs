@@ -101,7 +101,11 @@ impl RuntimeCore {
                 self.cancel_pointer();
                 self.kbd.held = physical_dispatch::Activation::Up;
             }
-            if self.commit.commits == 0 || self.commit.dirty || self.tree.nodes.get(self.app_root()).is_some_and(|n| n.handlers.on_window_focus.is_some()) {
+            // A resting window with a field caret needs to paint once on focus gain to start
+            // blinking, or on blur to leave the caret on and cancel its outstanding wake.
+            let caret_changed = self.live_visible() && !self.reduced_motion
+                && self.paint.caret_blink.window_focus_changed(focused, self.clock);
+            if caret_changed || self.commit.commits == 0 || self.commit.dirty || self.tree.nodes.get(self.app_root()).is_some_and(|n| n.handlers.on_window_focus.is_some()) {
                 self.frame.queue.push(Action::WindowFocus(focused));
             }
             if !focused {
