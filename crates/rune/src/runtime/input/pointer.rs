@@ -488,7 +488,7 @@ impl RuntimeCore {
         let on_down = !touch && n.handlers.press_on_down && n.handlers.on_press.is_some();
         if on_down {
             let point = self.pointer_event(ti, x, y);
-            self.frame.queue.push(Action::Press(path.clone(), crate::PointerButton::Primary, false, Some(point)));
+            self.frame.queue.push(Action::Press(path.clone(), crate::PointerButton::Primary, false, Some(point), PressSource::Pointer));
         }
         let mut held = capture::Held::new(path, d, crate::PointerButton::Primary, (x, y), now, second, drag_out).on_link(link).pressed_on_down(on_down).drag_handler(drag_handler);
         held.touch = touch;
@@ -621,7 +621,7 @@ impl RuntimeCore {
         let double_press = has_double && inside && click && button == crate::PointerButton::Primary && double;
         let point = (press || middle || double_press).then(|| self.pointer_event(i, x, y));
         if press {
-            self.frame.queue.push(Action::Press(path.clone(), button, held.touch, point));
+            self.frame.queue.push(Action::Press(path.clone(), button, held.touch, point, PressSource::Pointer));
         }
         if middle {
             self.frame.queue.push(Action::MiddlePress(path.clone(), point));

@@ -155,6 +155,7 @@ pub struct Tx {
     /// Whether any mouse button was held down anywhere in the window ([`Tx::pressing`]).
     pub(crate) pressing: bool,
     pub(crate) touch_tap: bool,
+    pub(crate) assistive_press: bool,
     /// `Tx::press_point`.
     pub(crate) press_point: Option<PointerEvent>,
     /// `Tx::link_rect`.

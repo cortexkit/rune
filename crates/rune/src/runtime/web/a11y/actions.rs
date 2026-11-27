@@ -2,7 +2,6 @@
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 
 use super::{A11yItem, RuntimeCore};
-use crate::runtime::Action;
 
 impl RuntimeCore {
     /// Appends hidden custom-action mirror buttons for node `i` under `host` when enabled and allowed.
@@ -42,7 +41,7 @@ impl RuntimeCore {
                 let Some(i) = self.live(path) else { return false };
                 if self.node_disabled(i) || !self.allowed(i) { return false; }
                 if self.tree.nodes[i].handlers.on_press.is_some() {
-                    self.frame.queue.push(Action::Press(path.to_owned(), crate::PointerButton::Primary, false, None));
+                    self.queue_a11y_press(path.to_owned());
                     true
                 } else if self.tree.nodes[i].input.is_some() {
                     self.queue_a11y(path.to_owned(), crate::a11y::actions::A11yAct::Focus(None));
@@ -55,7 +54,7 @@ impl RuntimeCore {
                 let Some(k) = event["link"].as_u64().and_then(|n| usize::try_from(n).ok()) else { return false };
                 let Some(i) = self.live(path) else { return false };
                 if self.node_disabled(i) || !self.allowed(i) || self.tree.nodes[i].text.as_ref().is_none_or(|t| k >= t.cold.links.len()) { return false; }
-                self.frame.queue.push(Action::Link(path.to_owned(), k, crate::PointerButton::Primary));
+                self.queue_a11y_link(path.to_owned(), k);
                 true
             }
             Some("a11y_custom") => {

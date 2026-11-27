@@ -39,6 +39,20 @@ impl Tx {
     /// activation or accessibility action returns false, including on touch-capable hosts.
     pub fn touch_tap(&self) -> bool { self.touch_tap }
 
+    /// True when an accessibility action activates a primary press or link handler:
+    /// [`El::on_press_tx`](crate::El::on_press_tx), [`El::set_on_press_tx`](crate::El::set_on_press_tx),
+    /// [`El::on_press_tx_any`](crate::El::on_press_tx_any),
+    /// [`El::on_background_press_tx`](crate::El::on_background_press_tx), or
+    /// [`El::on_link`](crate::El::on_link). Such actions include AccessKit `Click`, `Expand` or
+    /// `Collapse` routed to `on_press`, and activation from the web accessibility mirror.
+    /// Screen readers, voice control, switch control and automation can activate controls this way.
+    /// On the web, Rune exposes its controls as HTML elements for assistive technology. A keyboard
+    /// or pointer activation of one of those elements also returns true if it sends the same
+    /// message, because the bridge cannot distinguish the two kinds of activation.
+    /// False for pointer, touch and key events Rune handles directly, and in every other handler,
+    /// including secondary presses, passive press observers, and custom accessibility actions.
+    pub fn assistive_press(&self) -> bool { self.assistive_press }
+
     /// In [`El::on_press_tx`](crate::El::on_press_tx),
     /// [`El::on_background_press_tx`](crate::El::on_background_press_tx),
     /// [`El::on_double_press_tx`](crate::El::on_double_press_tx), and

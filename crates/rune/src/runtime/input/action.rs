@@ -3,6 +3,12 @@
 use super::*;
 use crate::time::Instant;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(in crate::runtime) enum PressSource {
+    Pointer,
+    Assistive,
+}
+
 pub(in crate::runtime) enum Action {
     WindowFocus(bool),
     Physical(crate::PhysicalInput, Option<physical_dispatch::Fallback>),
@@ -26,14 +32,14 @@ pub(in crate::runtime) enum Action {
     DrawnLayout(String, [f32; 4], bool),
     /// `El::on_visible`: the element came on screen or left it.
     Visible(String, bool),
-    Press(String, crate::PointerButton, bool, Option<PointerEvent>), // true for a touch tap
+    Press(String, crate::PointerButton, bool, Option<PointerEvent>, PressSource), // true for a touch tap
     DoublePress(String, Option<PointerEvent>),
     /// `El::on_middle_press`.
     MiddlePress(String, Option<PointerEvent>),
     /// `El::on_any_press`: passive window-wide mouse button-down observer.
     AnyPress(String, crate::PointerButton, PointerEvent),
     /// A text's link and the button that clicked it (the primary or the middle).
-    Link(String, usize, crate::PointerButton),
+    Link(String, usize, crate::PointerButton, PressSource),
     /// `El::on_link_secondary`: the text, its link and the press.
     LinkSecondary(String, usize, PointerEvent),
     /// `El::on_link_hover`: the text, hovered link id (or `None` on leave), hit line box
@@ -520,12 +526,13 @@ impl RuntimeCore {
                 one.select_from_change = one.select.is_some();
                 true
             }
-            Action::Press(path, button, touch, point) => {
+            Action::Press(path, button, touch, point, source) => {
                 let Some(f) = self.node(&path).and_then(|n| n.handlers.on_press.clone()) else { return false };
                 log_event!(self, "press {path}");
                 one.button = button;
                 one.touch_tap = touch;
                 one.press_point = point;
+                one.assistive_press = source == PressSource::Assistive;
                 f(app.states(), &mut one);
                 true
             }
@@ -552,8 +559,9 @@ impl RuntimeCore {
                 f(app.states(), button, point, &mut one);
                 true
             }
-            Action::Link(path, k, button) => {
+            Action::Link(path, k, button, source) => {
                 one.button = button;
+                one.assistive_press = source == PressSource::Assistive;
                 self.press_link(app, &path, k, &mut one)
             }
             Action::LinkSecondary(path, k, point) => self.secondary_press_link_or_menu(app, &path, k, point, &mut one),
@@ -731,13 +739,13 @@ impl RuntimeCore {
         self.frame.queue.len() != before
     }
     pub(crate) fn queue_a11y_press(&mut self, path: String) {
-        self.frame.queue.push(Action::Press(path, crate::PointerButton::Primary, false, None));
+        self.frame.queue.push(Action::Press(path, crate::PointerButton::Primary, false, None, PressSource::Assistive));
     }
     pub(crate) fn queue_a11y_secondary_press(&mut self, path: String, ev: PointerEvent) {
         self.frame.queue.push(Action::SecondaryPress(path, ev));
     }
     pub(crate) fn queue_a11y_link(&mut self, path: String, link: usize) {
-        self.frame.queue.push(Action::Link(path, link, crate::PointerButton::Primary));
+        self.frame.queue.push(Action::Link(path, link, crate::PointerButton::Primary, PressSource::Assistive));
     }
     pub(crate) fn queue_a11y_link_secondary(&mut self, path: String, link: usize, ev: PointerEvent) {
         self.frame.queue.push(Action::LinkSecondary(path, link, ev));

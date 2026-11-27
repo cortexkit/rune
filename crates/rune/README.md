@@ -786,7 +786,11 @@ top-left, which is what popups and context menus anchor to.
 `on_press_tx`, `on_press_tx_any`, `on_background_press_tx`, `on_double_press_tx`, and `on_middle_press` expose
 the pointer activation position through `tx.press_point() -> Option<PointerEvent>` (element-local
 `x`/`y` and window `window_x`/`window_y` on mouse or touch activation, `None` on keyboard or
-assistive-technology activation and outside press handlers). Inside `El::on_link` (and
+assistive-technology activation and outside press handlers). In `on_press_tx`,
+`on_press_tx_any`, `on_background_press_tx`, and `on_link`, use
+`tx.assistive_press() -> bool` to distinguish an accessibility action from a pointer, touch or
+key event Rune handles directly. On the web, keyboard or pointer activations of the HTML controls
+Rune exposes for accessibility can arrive as accessibility actions too. Inside `El::on_link` (and
 `Markdown::on_link_tx`), `tx.link_rect() -> Option<[f32; 4]>` returns `[left, top, width, height]`
 in window points for the activated link's first drawn line box on pointer click, touch tap,
 keyboard Enter/Space, and assistive-technology activation (`None` in every other handler and when

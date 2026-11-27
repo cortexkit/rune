@@ -18,6 +18,8 @@ pub(crate) mod android;
 #[cfg(test)]
 mod aria_tests;
 #[cfg(test)]
+mod assistive_press_tests;
+#[cfg(test)]
 mod auto_complete_tests;
 #[cfg(test)]
 mod current_tests;
