@@ -1081,7 +1081,7 @@ impl RuntimeCore {
                 let Some(i) = self.live(path) else { return false };
                 if self.tree.nodes[i].a11y.disabled || !self.allowed(i) { return false; }
                 if self.tree.nodes[i].handlers.on_press.is_some() {
-                    self.frame.queue.push(Action::Press(path.to_owned(), crate::PointerButton::Primary, false, None));
+                    self.queue_a11y_press(path.to_owned());
                     true
                 } else {
                     self.queue_a11y_delegate(i, accesskit::Action::Click)
@@ -1091,7 +1091,7 @@ impl RuntimeCore {
                 let Some(k) = event["link"].as_u64().and_then(|n| usize::try_from(n).ok()) else { return false };
                 let Some(i) = self.live(path) else { return false };
                 if self.tree.nodes[i].a11y.disabled || !self.allowed(i) || self.tree.nodes[i].text.as_ref().is_none_or(|t| k >= t.cold.links.len()) { return false; }
-                self.frame.queue.push(Action::Link(path.to_owned(), k, crate::PointerButton::Primary));
+                self.queue_a11y_link(path.to_owned(), k);
                 true
             }
             _ => false,

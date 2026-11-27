@@ -663,7 +663,10 @@ top-left, which is what popups and context menus anchor to.
 `on_press_tx`, `on_background_press_tx`, `on_double_press_tx`, and `on_middle_press` expose
 the pointer activation position through `tx.press_point() -> Option<PointerEvent>` (element-local
 `x`/`y` and window `window_x`/`window_y` on mouse or touch activation, `None` on keyboard or
-assistive-technology activation and outside press handlers). Add `.hover_tracks_bounds()` to an
+assistive-technology activation and outside press handlers). In `on_press_tx` and `on_link`, use
+`tx.assistive_press() -> bool` to distinguish an accessibility action from a pointer, touch or
+key event Rune handles directly. On the web, keyboard or pointer activations of the HTML controls
+Rune exposes for accessibility can arrive as accessibility actions too. Add `.hover_tracks_bounds()` to an
 element to make `on_hover_change` and hover/press paint tracks follow whether a held press is
 currently inside its clipped/`press_scale`-compensated hit bounds and inside the window (including
 on coordinate-less pointer-leave) without ending capture or changing ancestor defaults. `on_hover`,

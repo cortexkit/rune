@@ -108,6 +108,7 @@ pub struct Tx {
     /// The mouse button driving this press or drag (`Tx::button`).
     pub(crate) button: crate::PointerButton,
     pub(crate) touch_tap: bool,
+    pub(crate) assistive_press: bool,
     /// `Tx::press_point`.
     pub(crate) press_point: Option<PointerEvent>,
     /// Modifier keys held as the handler runs.
