@@ -29,6 +29,7 @@ members = [
     "crates/rune-taffy",
     "themes/opencode",
     "examples/hello",
+    "examples/commit_cost",
     "examples/hello-floor",
     "examples/launch-floor",
     "examples/web-hello",

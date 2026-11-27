@@ -759,6 +759,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "commit-cost"
+version = "0.0.1"
+dependencies = [
+ "rune",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

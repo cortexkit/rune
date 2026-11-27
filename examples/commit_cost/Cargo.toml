@@ -1,0 +1,11 @@
+[package]
+name = "commit-cost"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+
+[features]
+stages = ["rune/frame-profile"]
+
+[dependencies]
+rune = { workspace = true, default-features = true }
