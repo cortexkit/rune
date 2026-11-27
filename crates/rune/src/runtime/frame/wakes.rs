@@ -87,6 +87,7 @@ impl RuntimeCore {
             if self.focused_input().is_some() {
                 self.commit.dirty = true;
             }
+            self.paint.caret_blink.reset();
             // Back to the front: a field's keyboard-entry ring stays off until the keys move focus.
             if focused && self.host.window_focused == Some(false) && self.kbd.focus.entered_by_keys() {
                 self.kbd.focus.step(crate::runtime::input::focus_machine::FocusEvent::WindowReturned);

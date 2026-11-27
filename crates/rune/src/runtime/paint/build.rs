@@ -845,6 +845,7 @@ impl RuntimeCore {
         }
         self.keep_close(None, &mut layers, &mut active_cache, &mut glyph_count);
         self.keep_end();
+        self.paint.caret_blink.finish_paint();
         if self.paint.tracks_native_materials()
             && !self.paint.material_fallbacks.is_empty()
             && !self.paint.material_fallback_warned
