@@ -1,0 +1,1 @@
+- `Notification::image` adds an optional image from a local file: a macOS attachment thumbnail, a Windows toast logo, or a Linux notification image on servers that support it.

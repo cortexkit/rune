@@ -111,6 +111,62 @@ fn portal_shown_replaces_removes_and_bounds_entries() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn fdo_hints_use_a_file_uri_for_an_image_and_keep_the_desktop_entry() -> std::io::Result<()> {
+    use crate::linux::{fdo_hints, portal_notification};
+
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("café & 100% #.png");
+    std::fs::write(&path, [])?;
+
+    let n = Notification::new("n-1", "Ready");
+    let pictured = n.clone().image(path);
+    let hints = fdo_hints(&pictured, Some("com.example.App"));
+    let image = hints
+        .get("image-path")
+        .and_then(|v| <&str>::try_from(v).ok());
+    assert!(image.is_some_and(
+        |uri| uri.starts_with("file:///") && uri.ends_with("/caf%C3%A9%20&%20100%25%20%23.png")
+    ));
+    assert_eq!(
+        hints
+            .get("desktop-entry")
+            .and_then(|v| <&str>::try_from(v).ok()),
+        Some("com.example.App")
+    );
+    assert_eq!(
+        portal_notification(&pictured, 2),
+        portal_notification(&n, 2)
+    );
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn fdo_hints_without_an_image_are_unchanged() -> std::io::Result<()> {
+    use crate::linux::fdo_hints;
+    use std::collections::HashMap;
+    use zbus::zvariant::Value;
+
+    let n = Notification::new("n-1", "Ready");
+    let desktop = Some("com.example.App");
+    let expected = HashMap::from([
+        ("suppress-sound", Value::from(true)),
+        ("desktop-entry", Value::from("com.example.App")),
+    ]);
+    assert_eq!(fdo_hints(&n, desktop), expected);
+
+    let dir = tempfile::tempdir()?;
+    assert_eq!(
+        fdo_hints(&n.clone().image(dir.path().join("missing.png")), desktop),
+        expected
+    );
+    assert!(std::path::Path::new("Cargo.toml").is_file());
+    assert_eq!(fdo_hints(&n.image("Cargo.toml"), desktop), expected);
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn linux_dbus_hints_and_portal_vardict_encode_expected_keys() {
     use crate::linux::{fdo_hints, portal_activation_token, portal_notification};
     use std::collections::HashMap;

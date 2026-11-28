@@ -12,6 +12,10 @@ use block2::{Block, RcBlock};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, AnyProtocol, Bool, ClassBuilder, Sel};
 use objc2::{class, msg_send, sel};
+use std::ffi::CString;
+use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
+use tempfile::TempDir;
 
 #[link(name = "UserNotifications", kind = "framework")]
 unsafe extern "C" {}
@@ -114,14 +118,72 @@ unsafe fn add(n: &Notification) {
         if let Some(category) = category(&n.actions) {
             let _: () = msg_send![content, setCategoryIdentifier: ns(&category)];
         }
+        let copy = n
+            .image_file()
+            .and_then(|path| add_attachment(content, path));
         let request: *mut AnyObject = msg_send![
             class!(UNNotificationRequest),
             requestWithIdentifier: ns(&n.id),
             content: content,
             trigger: std::ptr::null::<AnyObject>()
         ];
-        let _: () = msg_send![center(), addNotificationRequest: request, withCompletionHandler: std::ptr::null::<Block<dyn Fn(*mut AnyObject)>>()];
+        if let Some(copy) = copy {
+            let mut fallback = n.clone();
+            fallback.image = None;
+            let done = RcBlock::new(move |error: *mut AnyObject| {
+                // Keep the copy alive until the center finishes scheduling the attachment.
+                let _copy = &copy;
+                if !error.is_null() {
+                    add(&fallback);
+                }
+            });
+            let _: () =
+                msg_send![center(), addNotificationRequest: request, withCompletionHandler: &*done];
+        } else {
+            let _: () = msg_send![center(), addNotificationRequest: request, withCompletionHandler: std::ptr::null::<Block<dyn Fn(*mut AnyObject)>>()];
+        }
     });
+}
+
+pub(super) unsafe fn add_attachment(content: *mut AnyObject, path: &Path) -> Option<TempDir> {
+    // Scheduling moves the attachment into the system's store. Give it a temporary copy so
+    // the app keeps its original file, including when another notification reuses it.
+    let dir = tempfile::Builder::new()
+        .prefix("rune-notification-")
+        .tempdir()
+        .ok()?;
+    let mut copy = dir.path().join("image");
+    copy.set_extension(path.extension()?);
+    std::fs::copy(path, &copy).ok()?;
+    let filename = CString::new(copy.as_os_str().as_bytes()).ok()?;
+
+    // SAFETY: caller holds an autorelease pool and passes live mutable notification content.
+    // `filename` is a NUL-terminated absolute path and the error pointer lives through the call.
+    unsafe {
+        let url: *mut AnyObject = msg_send![
+            class!(NSURL),
+            fileURLWithFileSystemRepresentation: filename.as_ptr(),
+            isDirectory: Bool::NO,
+            relativeToURL: std::ptr::null::<AnyObject>()
+        ];
+        if url.is_null() {
+            return None;
+        }
+        let mut error = std::ptr::null_mut::<AnyObject>();
+        let attachment: *mut AnyObject = msg_send![
+            class!(UNNotificationAttachment),
+            attachmentWithIdentifier: ns("image"),
+            URL: url,
+            options: std::ptr::null::<AnyObject>(),
+            error: &raw mut error
+        ];
+        if attachment.is_null() {
+            return None;
+        }
+        let attachments: *mut AnyObject = msg_send![class!(NSArray), arrayWithObject: attachment];
+        let _: () = msg_send![content, setAttachments: attachments];
+    }
+    Some(dir)
 }
 
 thread_local! {

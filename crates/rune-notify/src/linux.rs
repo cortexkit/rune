@@ -317,6 +317,12 @@ pub(crate) fn fdo_hints<'a>(n: &Notification, desktop_entry: Option<&'a str>) ->
     if let Some(entry) = desktop_entry {
         hints.insert("desktop-entry", Value::from(entry));
     }
+    if let Some(path) = n.image_file() {
+        // The spec takes a file:// URI for a local file; a plain string can name a theme icon.
+        let mut uri = String::from("file://");
+        super::append_file_uri_path(&mut uri, path.as_os_str().as_encoded_bytes());
+        hints.insert("image-path", Value::from(uri));
+    }
     hints
 }
 

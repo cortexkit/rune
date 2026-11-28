@@ -42,6 +42,7 @@ pub struct Notification {
     id: String,
     title: String,
     body: String,
+    image: Option<PathBuf>,
     info: Vec<(String, String)>,
     #[cfg_attr(not(any(target_os = "linux", target_os = "macos", target_os = "windows")), allow(dead_code))]
     actions: Vec<Action>,
@@ -74,6 +75,25 @@ impl Notification {
     pub fn body(mut self, body: impl Into<String>) -> Self {
         self.body = body.into();
         self
+    }
+
+    /// An image file, such as a PNG. Relative paths and missing files are ignored.
+    ///
+    /// - **macOS:** shows an attachment thumbnail at the trailing edge of the banner.
+    /// - **Windows:** replaces the toast's leading app logo with a circular image.
+    /// - **Linux:** sends an image to `org.freedesktop.Notifications` without changing the app
+    ///   icon. The notification server decides how to show it; the Flatpak portal ignores it.
+    /// - **Elsewhere:** the image is ignored.
+    pub fn image(mut self, path: impl Into<PathBuf>) -> Self {
+        self.image = Some(path.into());
+        self
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    fn image_file(&self) -> Option<&std::path::Path> {
+        self.image
+            .as_deref()
+            .filter(|path| path.is_absolute() && path.is_file())
     }
 
     /// A string the click hands back (`Click::info`), such as what to open.
@@ -111,6 +131,21 @@ impl Notification {
     pub fn sound(mut self, enabled: bool) -> Self {
         self.sound = enabled;
         self
+    }
+}
+
+/// Encodes a file URI path, keeping separators and valid URI path characters.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn append_file_uri_path(uri: &mut String, path: &[u8]) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    for &b in path {
+        if b.is_ascii_alphanumeric() || matches!(b, b'/' | b'-' | b'.' | b'_' | b'~' | b'&') {
+            uri.push(char::from(b));
+        } else {
+            uri.push('%');
+            uri.push(char::from(HEX[usize::from(b >> 4)]));
+            uri.push(char::from(HEX[usize::from(b & 15)]));
+        }
     }
 }
 

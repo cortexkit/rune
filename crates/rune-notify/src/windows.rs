@@ -11,6 +11,7 @@
 
 #![allow(unsafe_code)]
 
+use std::path::{Component, Path, Prefix};
 use std::sync::Mutex;
 
 use windows::Data::Xml::Dom::XmlDocument;
@@ -364,14 +365,24 @@ fn tag(id: &str) -> String {
     format!("{:016x}", h.finish())
 }
 
-/// The toast's XML: a generic toast with the title and body, its buttons and text boxes, and no
-/// sound. Its launch arguments are the user info, or with an activation scheme the link a click
+/// The toast's XML: a generic toast with the title and body, optional image, buttons and text
+/// boxes. Its launch arguments are the user info, or with an activation scheme the link a click
 /// opens. A button's arguments are the user info with its action and the notification's id;
 /// it's a background activation when the install registered the app's activator (it reaches
 /// `serve`, or starts the app for `wait`), else a foreground one the toast's own event takes in
 /// the running app, which doesn't bring itself forward for it.
 pub(super) fn xml(n: &Notification, scheme: Option<&str>) -> String {
     let body = if n.body.is_empty() { String::new() } else { format!("<text>{}</text>", escape(&n.body)) };
+
+    let image = n
+        .image_file()
+        .and_then(file_uri)
+        .map_or_else(String::new, |uri| {
+            format!(
+                "<image placement=\"appLogoOverride\" hint-crop=\"circle\" src=\"{}\"/>",
+                escape(&uri)
+            )
+        });
     let launch = match scheme {
         Some(scheme) => format!("activationType=\"protocol\" launch=\"{}\"", escape(&link(scheme, n))),
         None => format!("launch=\"{}\"", escape(&encode(&n.info))),
@@ -395,9 +406,39 @@ pub(super) fn xml(n: &Notification, scheme: Option<&str>) -> String {
     let actions = if actions.is_empty() { String::new() } else { format!("<actions>{}{}</actions>", inputs.concat(), buttons.concat()) };
     let audio = if n.sound { "" } else { "<audio silent=\"true\"/>" };
     format!(
-        "<toast {launch}><visual><binding template=\"ToastGeneric\"><text>{}</text>{body}</binding></visual>{actions}{audio}</toast>",
+        "<toast {launch}><visual><binding template=\"ToastGeneric\"><text>{}</text>{body}{image}</binding></visual>{actions}{audio}</toast>",
         escape(&n.title),
     )
+}
+
+fn file_uri(path: &Path) -> Option<String> {
+    let mut parts = path.components();
+    let Component::Prefix(prefix) = parts.next()? else {
+        return None;
+    };
+    let mut uri = match prefix.kind() {
+        Prefix::Disk(drive) | Prefix::VerbatimDisk(drive) => {
+            format!("file:///{}:", char::from(drive))
+        }
+        Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => {
+            let server = server.to_str()?;
+            if !server
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_'))
+            {
+                return None;
+            }
+            let mut uri = format!("file://{server}/");
+            super::append_file_uri_path(&mut uri, share.to_str()?.as_bytes());
+            uri
+        }
+        _ => return None,
+    };
+    for part in parts.filter(|part| !matches!(part, Component::RootDir)) {
+        uri.push('/');
+        super::append_file_uri_path(&mut uri, part.as_os_str().to_str()?.as_bytes());
+    }
+    Some(uri)
 }
 
 fn escape(s: &str) -> String {

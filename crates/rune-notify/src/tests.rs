@@ -28,6 +28,47 @@ fn notification_sound_defaults_false_and_can_opt_in() {
     assert!(!loud.sound(false).sound);
 }
 
+#[test]
+fn notification_image_stores_the_latest_path_without_accessing_it() {
+    let n = Notification::new("n-1", "New message");
+    assert_eq!(n.image, None);
+    let n = n.image("first.png").image("second.png");
+    assert_eq!(n.image, Some(PathBuf::from("second.png")));
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn windows_toast_xml_without_an_image_is_unchanged() -> std::io::Result<()> {
+    let n = Notification::new("n-1", "Ready & waiting").body("Body");
+    let expected = concat!(
+        "<toast launch=\"\"><visual><binding template=\"ToastGeneric\">",
+        "<text>Ready &amp; waiting</text><text>Body</text>",
+        "</binding></visual><audio silent=\"true\"/></toast>",
+    );
+    assert_eq!(windows::xml(&n, None), expected);
+
+    let dir = tempfile::tempdir()?;
+    assert_eq!(
+        windows::xml(&n.clone().image(dir.path().join("missing.png")), None),
+        expected
+    );
+    assert!(std::path::Path::new("Cargo.toml").is_file());
+    assert_eq!(windows::xml(&n.image("Cargo.toml"), None), expected);
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn windows_toast_xml_adds_an_escaped_circular_logo() -> std::io::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("café & 100% #.png");
+    std::fs::write(&path, [])?;
+    let xml = windows::xml(&Notification::new("n-1", "Ready").image(path), None);
+    assert!(xml.contains(r#"<image placement="appLogoOverride" hint-crop="circle" src="file:///"#));
+    assert!(xml.contains("/caf%C3%A9%20&amp;%20100%25%20%23.png\"/></binding>"));
+    Ok(())
+}
+
 #[cfg(target_os = "windows")]
 #[test]
 fn windows_toast_xml_honors_sound_option() {
@@ -45,6 +86,40 @@ fn macos_auth_options_include_sound_only_when_requested() {
     const UN_AUTH_ALERT: usize = 1 << 2;
     assert_eq!(mac::auth_options(false), UN_AUTH_BADGE | UN_AUTH_ALERT);
     assert_eq!(mac::auth_options(true), UN_AUTH_BADGE | UN_AUTH_ALERT | UN_AUTH_SOUND);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_attachment_uses_a_copy_of_the_image() -> std::io::Result<()> {
+    use objc2::class;
+    use objc2::msg_send;
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+
+    // A 1-by-1 grayscale PNG.
+    const PNG: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0,
+        0, 0, 0, 58, 126, 155, 85, 0, 0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 104, 0, 0, 0, 130, 0,
+        129, 119, 205, 114, 182, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("café 100%.png");
+    std::fs::write(&path, PNG)?;
+    // SAFETY: the live content and its attachments are only used inside this autorelease pool.
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let content: Retained<AnyObject> = msg_send![class!(UNMutableNotificationContent), new];
+        let content = Retained::as_ptr(&content).cast_mut();
+        assert!(mac::add_attachment(content, &dir.path().join("missing.png")).is_none());
+        let copy = mac::add_attachment(content, &path)
+            .ok_or_else(|| std::io::Error::other("the PNG did not become an attachment"))?;
+        let attachments: *mut AnyObject = msg_send![content, attachments];
+        let count: usize = msg_send![attachments, count];
+        assert_eq!(count, 1);
+        assert_eq!(std::fs::read(copy.path().join("image.png"))?, PNG);
+        drop(copy);
+        assert_eq!(std::fs::read(&path)?, PNG);
+        Ok(())
+    })
 }
 
 /// The delegate's click method, called the way UNUserNotificationCenter calls it, with a stand-in
