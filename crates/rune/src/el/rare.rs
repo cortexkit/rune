@@ -93,6 +93,9 @@ pub(crate) struct ElCold {
     pub(crate) virtual_rows_append_only: bool,
     /// [`El::virtual_overscan`](crate::El::virtual_overscan), clamped `(overscan, edge)` in viewports.
     pub(crate) virtual_overscan: Option<(f32, f32)>,
+    /// [`El::virtual_pinned_rows`](crate::El::virtual_pinned_rows): the fewest rows the list keeps
+    /// mounted while pinned to its end. `None` keeps the default.
+    pub(crate) virtual_pinned_rows: Option<usize>,
     /// [`El::virtual_items`](crate::El::virtual_items): app-windowed keyed item source.
     pub(crate) virtual_items: Option<Rc<dyn crate::el::items::VirtualItems>>,
     /// The memo this element was expanded from (`El::expand_memo`) to mount virtual rows.
@@ -165,6 +168,7 @@ impl Empty for ElCold {
         virtual_rows_version: None,
         virtual_rows_append_only: false,
         virtual_overscan: None,
+        virtual_pinned_rows: None,
         virtual_items: None,
         expanded_memo: None,
         glide: None,

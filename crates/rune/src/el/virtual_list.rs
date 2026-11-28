@@ -47,6 +47,9 @@ pub(crate) struct VirtualList {
     /// Opt-in `(overscan, edge)` in viewports (`El::virtual_overscan`), already clamped;
     /// `None` keeps `OVERSCAN` and `INDEXED_EDGE` (or `EAGER_EDGE` for `virtualize`).
     overscan_override: Option<(f32, f32)>,
+    /// Opt-in minimum of rows mounted while pinned to the end (`El::virtual_pinned_rows`);
+    /// `None` keeps `PINNED_ROWS`.
+    pinned_rows_override: Option<usize>,
     /// The rows the last applied commit mounted. Every measurement of a commit compares with
     /// these, not with the pass before it.
     pub shown: HashSet<String>,
@@ -213,7 +216,7 @@ const EAGER_EDGE: f32 = 0.5;
 /// Rows past it mount over the next frames, so a jump or a prepended page doesn't shape it all
 /// in one frame.
 const INDEXED_BUDGET: f32 = 0.5;
-/// The fewest rows a list pinned to its end keeps mounted above the end, whatever its overscan.
+/// Default minimum number of rows mounted while pinned to the end.
 const PINNED_ROWS: usize = 32;
 
 /// Clamps `(overscan, edge)` for `El::virtual_overscan`: returns `None` when either argument is
@@ -581,6 +584,14 @@ impl VirtualList {
         changed
     }
 
+    /// Sets the pinned minimum (`El::virtual_pinned_rows`) and returns whether it changed, so the
+    /// commit selects the end window again where it would otherwise hold the mounted one.
+    pub(crate) fn set_pinned_rows(&mut self, rows: Option<usize>) -> bool {
+        let changed = self.pinned_rows_override != rows;
+        self.pinned_rows_override = rows;
+        changed
+    }
+
     #[inline]
     pub(crate) fn overscan_vp(&self) -> f32 {
         self.overscan_override.map_or(OVERSCAN, |(o, _)| o)
@@ -767,7 +778,7 @@ impl VirtualList {
         let disable = pinned || self.passed || self.no_anchor;
         self.anchor_offset = (!disable).then_some(offset);
         self.anchor = if disable { None } else { self.anchor_at(offset) };
-        if pinned { start = start.min(end.saturating_sub(PINNED_ROWS)); }
+        if pinned { start = start.min(end.saturating_sub(self.pinned_rows_override.unwrap_or(PINNED_ROWS))); }
         end = end.max(start);
         self.place(start..end);
     }
@@ -856,12 +867,12 @@ impl VirtualList {
     /// progress from one whose heights keep changing under it. Only the overscan's own rows
     /// count: after a jump the mounted window may lie wholly above or below it, and the rows
     /// between the two are wanted by neither. A pinned list wants the overscan at its end, and
-    /// at least [`PINNED_ROWS`] rows, as [`select`](Self::select) mounts them.
+    /// at least its configured minimum, as [`select`](Self::select) mounts them.
     pub(crate) fn unfilled(&self, offset: f32, pinned: bool) -> usize {
         if self.keys.is_empty() { return 0; }
         let (start, end) = if pinned {
             let (start, end) = self.overscan(self.max_offset());
-            (start.min(end.saturating_sub(PINNED_ROWS)), end)
+            (start.min(end.saturating_sub(self.pinned_rows_override.unwrap_or(PINNED_ROWS))), end)
         } else {
             self.overscan(offset.min(self.max_offset()))
         };
@@ -872,6 +883,9 @@ impl VirtualList {
 
 #[cfg(test)]
 mod overscan_tests;
+
+#[cfg(test)]
+mod pinned_rows_tests;
 
 #[cfg(test)]
 mod rekey_tests;

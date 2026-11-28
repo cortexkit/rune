@@ -19,6 +19,8 @@ mod prune_tests;
 pub(super) mod relayout;
 pub(super) mod remount;
 pub(super) mod text_layout;
+#[cfg(test)]
+mod virtual_pinned_rows_tests;
 pub(super) mod watch;
 pub(super) mod why;
 

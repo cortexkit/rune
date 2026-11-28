@@ -1,0 +1,1 @@
+- **Virtual lists can set how many rows they keep mounted at the end.** Use `El::virtual_pinned_rows(0)` to let the viewport and overscan alone pick the window while pinned. Lists that don't set it still keep at least 32 rows when available.

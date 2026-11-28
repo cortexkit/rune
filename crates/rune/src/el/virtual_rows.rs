@@ -181,6 +181,34 @@ impl El {
         self
     }
 
+    /// Sets the minimum number of rows a virtual list ([`El::virtual_rows`] or [`El::virtualize`])
+    /// keeps mounted while its scroll viewport is pinned to the bottom. A viewport with
+    /// [`ScrollSpec::stick_bottom()`](crate::ScrollSpec::stick_bottom) is pinned while it follows
+    /// the end as rows arrive or grow, not while the reader is scrolled away from the end.
+    ///
+    /// The default is 32 rows. With `0`, only the viewport and its
+    /// [`El::virtual_overscan`] determine the window.
+    ///
+    /// Smaller values keep fewer offscreen nodes mounted and reduce per-frame work at the end,
+    /// but may need to build and measure rows sooner when the reader scrolls up. Larger values
+    /// keep more rows ready for that scroll at the cost of more mounted nodes.
+    ///
+    /// ```
+    /// # use rune::{GrowthSpec, ScrollSpec, col, text};
+    /// # let _ =
+    /// col().scroll(ScrollSpec::stick_bottom()).child(
+    ///     col().growth(GrowthSpec::default())
+    ///         .virtual_rows(500, 22.0, |_: &(), i| i.to_string().into(), |_, i| text(i.to_string()))
+    ///         .virtual_overscan(0.5, 0.25)
+    ///         .virtual_pinned_rows(0),
+    /// )
+    /// # ;
+    /// ```
+    pub fn virtual_pinned_rows(mut self, rows: usize) -> Self {
+        self.cold_mut().virtual_pinned_rows = Some(rows);
+        self
+    }
+
     /// On a virtual list ([`El::virtualize`] or [`El::virtual_rows`]), called with the index
     /// range `start..end` of rows currently visible in its scroll viewport: on its first layout,
     /// and whenever that range or the rows change. Changes from commits, rekeys, wheel scrolls
