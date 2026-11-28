@@ -8,6 +8,27 @@ fn lines(l: &Layout<Ink>) -> Vec<std::ops::Range<usize>> {
 }
 
 #[test]
+fn tracked_text_gives_bidi_formatting_controls_no_advance() {
+    let mut ts = TextSystem::default();
+    for tracking in [-0.25, 0.25] {
+        let style = TextStyle { tracking, ..TextStyle::new(13.5, 400.0) };
+        for (open, close) in [
+            ('\u{200e}', '\u{200f}'),
+            ('\u{202a}', '\u{202c}'), ('\u{202b}', '\u{202c}'),
+            ('\u{202d}', '\u{202c}'), ('\u{202e}', '\u{202c}'),
+            ('\u{2066}', '\u{2069}'), ('\u{2067}', '\u{2069}'), ('\u{2068}', '\u{2069}'),
+        ] {
+            let text = format!("{open}alpha beta{close}");
+            let l = ts.layout_rich(&text, &[], style, 2.0, None);
+            for (at, control) in [(0, open), (text.len() - close.len_utf8(), close)] {
+                let advance = parley::Cluster::from_byte_index(&l, at).unwrap().advance();
+                assert_eq!(advance, 0.0, "{control:?} with tracking {tracking}");
+            }
+        }
+    }
+}
+
+#[test]
 fn wrap_anywhere_breaks_an_unbroken_word_inside_the_width() {
     let mut ts = TextSystem::default();
     let style = TextStyle::new(14.0, 400.0);

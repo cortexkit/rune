@@ -491,6 +491,16 @@ impl TextSystem {
                 let v = exact_map.get(at).or_else(|| given_map.get(at)).unwrap_or(base_spacing);
                 b.push(StyleProperty::LetterSpacing(v + synthetic_bold::ADVANCE), range.clone());
             }
+            // Bidi formatting controls are invisible, so they take no letter spacing.
+            // Giving one negative advance can make a line wrap before reaching it,
+            // even at the width measured for the whole line.
+            if (corrected || !bold.is_empty()) && !text.is_ascii() {
+                for (at, ch) in text.char_indices() {
+                    if matches!(ch, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}') {
+                        b.push(StyleProperty::LetterSpacing(0.0), at..at + ch.len_utf8());
+                    }
+                }
+            }
             // Boxes before and after a pill's label make room for its chip. The label may break
             // like any text; `break_lines_with_blocks` moves a split pill whole to the next line
             // and lets it wrap only when it is wider than a line, as a browser wraps a span.

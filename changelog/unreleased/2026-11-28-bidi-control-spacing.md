@@ -1,0 +1,1 @@
+- Invisible bidirectional formatting controls no longer take letter spacing. A line with negative tracking that fits its measured width no longer wraps early because of a closing isolate.
