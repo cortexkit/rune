@@ -342,7 +342,10 @@ where G: Fn(&str) -> bool, A: Fn(&str) -> bool, M: Fn(&Reveal) -> bool {
 impl RuntimeCore {
     /// Resolve stops, reveals and destinations against the tree from the update that requested them.
     pub(in crate::runtime) fn finish_scroll_requests(&mut self, app: &mut dyn AppDriver, tx: &mut Tx, follow: bool) {
-        let destination = !tx.scroll_bottom.is_empty() || !tx.scroll_pages.is_empty() || !tx.scroll_offsets.is_empty();
+        let destination = !tx.scroll_bottom.is_empty()
+            || !tx.scroll_pages.is_empty()
+            || !tx.scroll_offsets.is_empty()
+            || !tx.scroll_deltas.is_empty();
         let stops = !tx.scroll_stops.is_empty();
         if tx.scroll_to.is_empty() && !destination && !stops && !follow { return; }
         if stops { self.stop_scrolls(std::mem::take(&mut tx.scroll_stops)); }
@@ -360,6 +363,10 @@ impl RuntimeCore {
         if !tx.scroll_pages.is_empty() { self.scroll_pages(app, std::mem::take(&mut tx.scroll_pages)); }
         if !tx.scroll_offsets.is_empty() { self.scroll_to_offsets(app, std::mem::take(&mut tx.scroll_offsets)); }
         if destination { self.scroll.requests.step(Event::Destination); }
+        // A reveal must not own the viewport while a relative move measures its new window.
+        if !tx.scroll_deltas.is_empty() {
+            self.scroll_by_deltas(app, std::mem::take(&mut tx.scroll_deltas));
+        }
     }
 }
 

@@ -857,14 +857,8 @@ impl RuntimeCore {
         let Some((id, held)) = self.wheel_run(now, x, y, dy, mods, phased, start) else { return };
         let stick = self.tree.node_index.get(&id).and_then(|&i| self.tree.nodes[i].scroll).is_some_and(|s| s.stick_bottom);
         let Some(st) = self.scroll.scrolls.get_mut(&id) else { return };
-        let before = st.offset;
-        st.offset = (st.offset - f64::from(dy)).clamp(0.0, st.max);
-        st.moved();
-        let moved = st.offset != before;
-        if moved {
-            st.note_source(if momentum { crate::ScrollSource::Momentum } else { crate::ScrollSource::Direct });
-        }
-        st.land(stick);
+        let source = if momentum { crate::ScrollSource::Momentum } else { crate::ScrollSource::Direct };
+        let moved = st.jump_y(st.offset - f64::from(dy), stick, source);
         log_event!(self, "wheel {dy:.1}");
         if moved { self.pointer.scroll_cancels_press(&self.tree.nodes, id); }
         self.scroll.ran_wheel_vertical(id, now, x, y, dy, mods, phased, moved, held);
