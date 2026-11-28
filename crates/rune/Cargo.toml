@@ -306,6 +306,10 @@ required-features = ["frame-profile"]
 name = "scroll_commits"
 required-features = ["frame-profile"]
 
+[[example]]
+name = "region_focus"
+required-features = ["frame-profile"]
+
 [[test]]
 name = "integration"
 
