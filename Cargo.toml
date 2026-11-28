@@ -131,7 +131,9 @@ naga = { path = "vendor/naga" }
 # `WindowExtWayland::content_corner_radius` tells an app the radius its content leaves its bottom
 # corners to while a client-side frame rounds the window (see `vendor/sctk-adwaita`); and on a Wayland
 # compositor without the decoration protocol the client-side frame's two system reads start with
-# the event loop (`sctk_adwaita::read_system_config_early`). Re-made by
+# the event loop (`sctk_adwaita::read_system_config_early`); and on macOS a horizontal swipe
+# (`swipeWithEvent:`, which some mice send for their side buttons) arrives as a click
+# of `MouseButton::Back` or `Forward`. Re-made by
 # `scripts/vendor-winit.sh <version>` when winit is bumped; apps that build Rune patch it too.
 winit = { path = "vendor/winit" }
 # sctk-adwaita as published plus `vendor/sctk-adwaita.patch`: the visible one-point border a

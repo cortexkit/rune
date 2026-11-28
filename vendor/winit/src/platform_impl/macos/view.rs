@@ -767,6 +767,34 @@ declare_class!(
             });
         }
 
+        // A horizontal swipe is how macOS says "back" or "forward": a three-finger swipe on
+        // a trackpad, and what some mice send for their side buttons in place of buttons 3
+        // and 4. It arrives as a click of the matching button, so an app that listens for
+        // `MouseButton::Back` and `Forward` hears both kinds of mouse.
+        #[method(swipeWithEvent:)]
+        fn swipe_with_event(&self, event: &NSEvent) {
+            trace_scope!("swipeWithEvent:");
+
+            // A swipe a device reports in phases counts once, when it ends; one reported as a
+            // single event has no phase.
+            let phase = unsafe { event.phase() };
+            if phase != NSEventPhase::Ended && phase != NSEventPhase::None {
+                return;
+            }
+            let Some(button) = swipe_button(unsafe { event.deltaX() } as f64) else {
+                return;
+            };
+            self.mouse_motion(event);
+            self.update_modifiers(event, false);
+            for state in [ElementState::Pressed, ElementState::Released] {
+                self.queue_event(WindowEvent::MouseInput {
+                    device_id: DEVICE_ID,
+                    state,
+                    button,
+                });
+            }
+        }
+
         #[method(rotateWithEvent:)]
         fn rotate_with_event(&self, event: &NSEvent) {
             trace_scope!("rotateWithEvent:");
@@ -1120,6 +1148,18 @@ impl WinitView {
             device_id: DEVICE_ID,
             position: view_point.to_physical(self.scale_factor()),
         });
+    }
+}
+
+/// The history button a swipe stands for. AppKit reports a swipe to the left as a positive
+/// `deltaX`, which browsers take as "back"; a vertical swipe has none and is no button.
+fn swipe_button(delta_x: f64) -> Option<MouseButton> {
+    if delta_x > 0.0 {
+        Some(MouseButton::Back)
+    } else if delta_x < 0.0 {
+        Some(MouseButton::Forward)
+    } else {
+        None
     }
 }
 

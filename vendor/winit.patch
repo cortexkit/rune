@@ -196,7 +196,38 @@ diff --git a/src/platform_impl/macos/view.rs b/src/platform_impl/macos/view.rs
 +                Some(NSAttributedString::from_nsstring(&NSString::from_str(&text[a..b])))
 +            })
          }
-@@ -823,3 +857,6 @@ impl WinitView {
+@@ -735,2 +769,30 @@ declare_class!(
+ 
++        // A horizontal swipe is how macOS says "back" or "forward": a three-finger swipe on
++        // a trackpad, and what some mice send for their side buttons in place of buttons 3
++        // and 4. It arrives as a click of the matching button, so an app that listens for
++        // `MouseButton::Back` and `Forward` hears both kinds of mouse.
++        #[method(swipeWithEvent:)]
++        fn swipe_with_event(&self, event: &NSEvent) {
++            trace_scope!("swipeWithEvent:");
++
++            // A swipe a device reports in phases counts once, when it ends; one reported as a
++            // single event has no phase.
++            let phase = unsafe { event.phase() };
++            if phase != NSEventPhase::Ended && phase != NSEventPhase::None {
++                return;
++            }
++            let Some(button) = swipe_button(unsafe { event.deltaX() } as f64) else {
++                return;
++            };
++            self.mouse_motion(event);
++            self.update_modifiers(event, false);
++            for state in [ElementState::Pressed, ElementState::Released] {
++                self.queue_event(WindowEvent::MouseInput {
++                    device_id: DEVICE_ID,
++                    state,
++                    button,
++                });
++            }
++        }
++
+         #[method(rotateWithEvent:)]
+@@ -823,3 +885,6 @@ impl WinitView {
  
 -        *this.ivars().input_source.borrow_mut() = this.current_input_source();
 +        // The input source is not read here: making the view's input context and asking the
@@ -204,7 +235,22 @@ diff --git a/src/platform_impl/macos/view.rs b/src/platform_impl/macos/view.rs
 +        // compared only while the IME is enabled (`keyDown:`), and `setMarkedText:` reads it
 +        // as the IME becomes enabled.
  
-@@ -1142 +1179,30 @@ fn replace_event(event: &NSEvent, option_as_alt: OptionAsAlt) -> Retained<NSEven
+@@ -1088,2 +1153,14 @@ impl WinitView {
+ 
++/// The history button a swipe stands for. AppKit reports a swipe to the left as a positive
++/// `deltaX`, which browsers take as "back"; a vertical swipe has none and is no button.
++fn swipe_button(delta_x: f64) -> Option<MouseButton> {
++    if delta_x > 0.0 {
++        Some(MouseButton::Back)
++    } else if delta_x < 0.0 {
++        Some(MouseButton::Forward)
++    } else {
++        None
++    }
++}
++
+ /// Get the mouse button from the NSEvent.
+@@ -1142 +1219,30 @@ fn replace_event(event: &NSEvent, option_as_alt: OptionAsAlt) -> Retained<NSEven
  }
 +
 +/// Rune: a marked text's clauses, byte ranges with whether each is the one being converted: one
