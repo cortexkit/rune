@@ -1,6 +1,7 @@
 //! `Tx::scroll_to`, `Tx::scroll_to_with`, `Tx::scroll_to_instant`, `Tx::scroll_to_x` and
 //! `Tx::scroll_to_y`: moving a viewport to an offset its app picked, gliding there or at once;
-//! and `Tx::scroll_key_to`, landing an element at a height in its viewport.
+//! `Tx::scroll_key_to`, landing an element at a height in its viewport; and `Tx::scroll_by`,
+//! moving by a distance from where the reader is.
 use super::*;
 use crate::runtime::scroll_mode::{self as mode, Event as ModeEvent};
 
@@ -44,6 +45,86 @@ impl RuntimeCore {
             }
             let viewport = self.tree.nodes[i].path.as_str();
             self.scroll.requests.step(requests::Event::Stop { viewport });
+        }
+    }
+
+    /// Move from the current offsets, as a wheel delta does. Put the offsets in place before
+    /// mounting rows so the virtual list can anchor its new window and keep the adjustment for
+    /// any rows that measure differently.
+    pub(in crate::runtime) fn scroll_by_deltas(
+        &mut self,
+        app: &mut dyn AppDriver,
+        requests: Vec<(String, f32, f32)>,
+    ) {
+        let mut deltas: Vec<(usize, f64, f64)> = Vec::new();
+        for (key, dx, dy) in requests {
+            let Some(i) = self.scroll_viewport_on(&key, true, true) else {
+                continue;
+            };
+            if let Some((_, x, y)) = deltas.iter_mut().find(|(viewport, ..)| *viewport == i) {
+                *x += f64::from(dx);
+                *y += f64::from(dy);
+            } else {
+                deltas.push((i, f64::from(dx), f64::from(dy)));
+            }
+        }
+        let mut starts = Vec::new();
+        let mut ends = Vec::new();
+        let source = crate::ScrollSource::Programmatic;
+        for (i, dx, dy) in deltas {
+            let n = &self.tree.nodes[i];
+            let Some(st) = self.scroll.scrolls.get_mut(&n.id) else {
+                continue;
+            };
+            st.spring = None;
+            st.x.motion = XMotion::Rest;
+            if n.scroll_axes.x() && dx != 0.0 && !dx.is_nan() {
+                let before = st.x.offset;
+                st.x.offset = (before + dx).clamp(0.0, st.x.max);
+                st.moved();
+                if st.x.offset != before {
+                    st.note_source(source);
+                }
+            }
+            if n.scroll_axes.y() && dy != 0.0 && !dy.is_nan() {
+                let to = st.offset + dy;
+                let stick = n.scroll.is_some_and(|s| s.stick_bottom);
+                st.jump_y(to, stick, source);
+                if dy < 0.0 && to <= 0.0 {
+                    starts.push(n.id);
+                }
+                if !stick && dy > 0.0 && to >= st.max {
+                    // As for scroll_to_bottom, pin just long enough to measure the tail.
+                    st.pin();
+                    ends.push(n.id);
+                }
+            } else {
+                st.halt();
+            }
+        }
+        if self.virtual_window_changed() {
+            self.commit_virtual_scroll(
+                app,
+                &Tx {
+                    commit: Commit::Instant,
+                    ..Tx::default()
+                },
+            );
+            if !ends.is_empty() {
+                self.step_scroll(0.0);
+            }
+            // If the first row opts out of anchoring, measuring it can shift a later anchor.
+            // A move clamped at the start must still show the first row.
+            for id in starts {
+                if let Some(st) = self.scroll.scrolls.get_mut(&id) {
+                    st.offset = 0.0;
+                }
+            }
+        }
+        for id in ends {
+            if let Some(st) = self.scroll.scrolls.get_mut(&id) {
+                st.jump_y(st.max, false, source);
+            }
         }
     }
 
@@ -259,6 +340,25 @@ pub(in crate::runtime) fn glide_axis(spring: Spring, offset: &mut f64, glide: &m
 }
 
 impl ScrollState {
+    /// Land an immediate vertical move, leaving the new offset for virtual-row measurement to
+    /// anchor. Returns whether the offset changed.
+    pub(in crate::runtime) fn jump_y(
+        &mut self,
+        to: f64,
+        stick: bool,
+        source: crate::ScrollSource,
+    ) -> bool {
+        let before = self.offset;
+        self.offset = to.clamp(0.0, self.max);
+        self.moved();
+        let moved = self.offset != before;
+        if moved {
+            self.note_source(source);
+        }
+        self.land(stick);
+        moved
+    }
+
     /// The spring the running glide steps on.
     pub(in crate::runtime) fn glide_spring(&self) -> Spring {
         self.spring.unwrap_or(crate::tok::motion::GLIDE)
@@ -401,3 +501,6 @@ impl RuntimeCore {
 #[cfg(test)]
 #[path = "offset_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "scroll_by_tests.rs"]
+mod scroll_by_tests;

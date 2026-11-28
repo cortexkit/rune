@@ -500,7 +500,9 @@ impl RuntimeCore {
         if self.tree.has_pixel_aspect && self.pixel_aspect_changed() { self.commit.relayout = true; }
         let settling = self.commit.is_settling();
         let has_scroll_request = !tx.scroll_to.is_empty() || !tx.scroll_bottom.is_empty()
-            || !tx.scroll_pages.is_empty() || !tx.scroll_offsets.is_empty() || self.edit.caret_follow;
+            || !tx.scroll_pages.is_empty() || !tx.scroll_offsets.is_empty()
+            || !tx.scroll_deltas.is_empty()
+            || self.edit.caret_follow;
         let shifted = !(self.commit.dirty || self.commit.relayout || settling) && self.virtual_window_changed();
         // When a scroll request is about to move viewports and nothing else needs a commit,
         // wait for the request so we remount once at the new offset instead of filling the old one.

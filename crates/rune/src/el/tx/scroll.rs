@@ -1,5 +1,5 @@
 //! `Tx`'s scroll requests: revealing a row, moving a viewport to its end, a page or an
-//! offset, and holding an element where it shows.
+//! offset, moving it by a distance, and holding an element where it shows.
 //!
 //! None of them follows the change's motion ([`Tx::motion`], [`Tx::motion_curve`]): a glide
 //! runs on `tok::motion::GLIDE`, or on the spring [`Tx::scroll_to_with`] takes, and every other
@@ -112,6 +112,31 @@ impl Tx {
     /// glide stops, and a `stick_bottom` viewport that lands on its end follows it again.
     pub fn scroll_to_y(&mut self, key: impl Into<String>, y: f32) {
         self.scroll_offsets.push(crate::runtime::ScrollRequest { key: key.into(), x: None, y: Some(y), glide: None, anchor: crate::runtime::ScrollAnchor::None, source: crate::ScrollSource::Programmatic });
+    }
+    /// Move the scroll viewport keyed `key` (or the nearest one containing it) by `dx` points
+    /// right and `dy` points down, clamped to the content's ends. Axes it doesn't scroll are
+    /// ignored. The move is instant and stops any momentum or glide. A `stick_bottom` viewport
+    /// follows its end again when it lands there and stops following when it leaves.
+    ///
+    /// Use this to move a distance from where the reader is: as with a wheel move, measuring
+    /// newly mounted virtual rows keeps the reading position. A move that reaches an end lands
+    /// on the measured end; a wheel move can stop at the estimated end. Use [`Tx::scroll_to_y`]
+    /// to go to a particular offset in the content instead. Distances for the same viewport in
+    /// one transaction add up before clamping.
+    ///
+    /// ```
+    /// use rune::{Key, KeyEvent, ScrollSpec, Tx, col};
+    ///
+    /// let list = col().key("list").scroll(ScrollSpec::default()).focusable(true)
+    ///     .on_key(|_: &mut (), ev: &KeyEvent, tx: &mut Tx| {
+    ///         if ev.key != Key::Up { return false; }
+    ///         tx.live_only();
+    ///         tx.scroll_by("list", 0.0, -60.0);
+    ///         true
+    ///     });
+    /// ```
+    pub fn scroll_by(&mut self, key: impl Into<String>, dx: f32, dy: f32) {
+        self.scroll_deltas.push((key.into(), dx, dy));
     }
     /// Glide the scroll viewport keyed `key` (or the nearest one containing it) to show its
     /// content from (`x`, `y`) points in, on the spring [`Tx::scroll_to_bottom`] uses, as a
