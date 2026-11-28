@@ -27,6 +27,28 @@ fn duplicate_sibling_keys_tooling_reports_and_lays_out() {
 }
 
 #[test]
+fn shrink_to_fit_text_with_a_bidi_isolate_keeps_its_measured_height() {
+    use crate::el::{row, text};
+    use crate::tok::{Family, TextStyle};
+
+    let font = TextStyle { tracking: -0.25, ..TextStyle::new(13.5, 400.0).lh(20.0).family(Family::Named("Inter")) };
+    let mut rt = Runtime::new(font, |font, _| {
+        col().w_full().items_end().child(
+            col().key("fit").max_w(180.0).child(row().w_full().child(
+                col().w_full().shrink().pl(12.0).child(text("\u{2066}alpha beta\u{2069}").font(*font).wrap().w_full().key("body")),
+            )),
+        )
+    }, (200.0, 100.0), Env::new(true, 2.0));
+    rt.frame(0.0);
+
+    let elements = rt.elements();
+    let fit = elements.iter().find(|e| e.key.as_deref() == Some("fit")).unwrap();
+    let body = elements.iter().find(|e| e.key.as_deref() == Some("body")).unwrap();
+    assert_eq!(fit.rect[3], 20.0, "the text's intrinsic width fits one line");
+    assert_eq!(body.text_size.unwrap()[1], fit.rect[3], "the painted text must fit the measured column at text width {}", body.rect[2]);
+}
+
+#[test]
 fn side_panel_wraps_once_and_releases_height_after_stable_width() {
     use crate::el::{row, text};
     fn view(s: &(f32, bool), cx: &mut Cx<(f32, bool)>) -> El {
